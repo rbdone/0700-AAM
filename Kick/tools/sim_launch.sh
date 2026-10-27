@@ -60,6 +60,7 @@ done
 mkdir -p "$(dirname "$LOG")"
 cd "$BUILD"
 export KICK_SIM_CONTROL=${KICK_SIM_CONTROL:-$PWD/.sim_ctl}
+[ -p "$KICK_SIM_CONTROL" ] && rm -f "$KICK_SIM_CONTROL"   # never block on a stale FIFO
 : > "$KICK_SIM_CONTROL"
 case "$LOG" in /*) echo "$LOG" > .sim_log ;; *) echo "$OLDPWD/$LOG" > .sim_log ;; esac
 "$APP" > "$LOG" 2>&1 &
