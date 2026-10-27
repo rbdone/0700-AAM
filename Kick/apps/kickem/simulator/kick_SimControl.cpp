@@ -7,6 +7,7 @@
  */
 
 #include "kick_SimControl.h"
+#include "kick_Simulator.h" // EndlessKnob, for "turn"
 
 #include <typeinfo>
 
@@ -170,6 +171,30 @@ namespace sim
             return ok();
         }
 
+        if( cmd == "turn" )
+        {
+            // Endless encoders: the jog wheel is the largest, P1..P4 are the others top to
+            // bottom (left to right). Same path as dragging one: onStep( steps ) -> the knob
+            // packet the surface would send.
+            juce::Array<EndlessKnob*> knobs;
+            findIn( *panel.getTopLevelComponent(), [&]( juce::Component& C ) {
+                if( auto* k = dynamic_cast<EndlessKnob*>( &C ) )
+                    knobs.add( k );
+                return false;
+            } );
+            std::sort( knobs.begin(), knobs.end(), []( EndlessKnob* a, EndlessKnob* b ) {
+                if( a->getWidth() != b->getWidth() ) return a->getWidth() < b->getWidth(); // jog last
+                return a->getY() != b->getY() ? a->getY() < b->getY() : a->getX() < b->getX();
+            } );
+            const auto name  = tok[0].toUpperCase();
+            const auto steps = tok[1].getIntValue();
+            const int  idx   = name == "JOG" ? 4 : ( name.length() == 2 && name[0] == 'P' ? name.getTrailingIntValue() - 1 : -1 );
+            if( !juce::isPositiveAndBelow( idx, knobs.size() ) || steps == 0 || !knobs[idx]->onStep )
+                return fail( "usage: turn P1|P2|P3|P4|JOG STEPS (non-zero, negative = anticlockwise)" );
+            knobs[idx]->onStep( steps );
+            return ok();
+        }
+
         if( cmd == "echo" )
         {
             log( "echo " + tok.joinIntoString( " " ) );
@@ -188,7 +213,9 @@ namespace sim
 
     juce::Component* SimControl::findScreenComponent( const juce::String& Name )
     {
-        auto match = [&]( juce::Component& C ) { return nameOf( C ) == Name; };
+        // Zero-size components are skipped: some dialog contents carry unused 0x0 "Apply" /
+        // "Cancel" buttons of the same name as the dialog's real ones (AppSelectProgramMode).
+        auto match = [&]( juce::Component& C ) { return nameOf( C ) == Name && !C.getLocalBounds().isEmpty(); };
         // Popups sit above the screen, so look there first.
         auto wins = windows( panel );
         for( int i = wins.size(); --i >= 1; )

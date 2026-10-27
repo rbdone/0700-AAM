@@ -18,6 +18,12 @@ namespace mt
     /// Threading: the audio thread runs process(); the UI thread calls everything else.
     /// Buffer (re)allocation and saving take a spin lock that process() only try-locks,
     /// so a resize can at worst drop one block of audio.
+    ///
+    /// Semantics follow the public AudIO::AudioRecorder (AudIO/Objects/Recorder.cpp) where it
+    /// has the same API: onRecorderLengthChanged fires when the length is set and, with the
+    /// recorded length, when recording stops; a sampler recording stopped early is truncated
+    /// to what was recorded, so the progress reads 1.0 afterwards. Recording always runs
+    /// forward; Direction is the playback direction (the looper's reverse button).
     class Recorder : public AudIO::Object,
                      public AudIO::DawRouting
     {
@@ -133,6 +139,11 @@ namespace mt
         /// Hook for subclasses to run inserts on the mixed output (Looper).
         virtual void processOutput( AudIO::Buffer<float>& ) {}
 
+        /// Looper behaviour: the buffer length is the loop (N bars), playback and recording
+        /// share one position and wrap at the loop length, a replace recording plays the loop
+        /// once it has gone round, and overdub adds to the loop while it plays.
+        bool loopMode{ false };
+
         void notify( const std::function<void()>& Fn );
         void notifyLength();
         void takeUndoSnapshot();
@@ -158,6 +169,7 @@ namespace mt
         std::atomic<float> gain{ 1.f }, pan{ 0.f }, monitorGain{ 1.f }, threshold{ 0.f };
         std::atomic<int>   direction{ FORWARD }, mode{ LR_STEREO }, recState{ RecIdle };
         std::atomic<int>   writePos{ 0 }, readPos{ 0 }, recordedSamples{ 0 };
+        std::atomic<int>   passSamples{ 0 }; // looper: samples recorded since the last startRecording()
 
         AudIO::LevelMeter meter;
         AudIO::MeterData  inMeterData, outMeterData;
@@ -180,24 +192,51 @@ namespace mt
     {
     public:
         explicit Looper( AudIO::Design& D )
-            : Recorder( D ) {}
+            : Recorder( D )
+        {
+            loopMode = true;
+            looping.store( true ); // a loop plays round until stopped
+        }
         const char* getType() const override { return "Looper"; }
 
+        /// RECORD (replace). The screen sets the overdub flag only for OVERDUB, so a plain
+        /// record clears it here.
         void setRecord( bool Record )
         {
             if( Record )
+            {
+                setOverdub( false );
                 startRecording( false, true );
+            }
             else
                 stopRecording();
         }
-        void setPlay() { startPreview( 0.0 ); }
+        /// PLAY on the looper screen: punch out of any recording and keep the loop playing in
+        /// time (from the top if it was stopped).
+        void setPlay()
+        {
+            stopRecording();
+            setOverdub( false );
+            if( !isPreviewing() )
+                startPreview( 0.0 );
+        }
 
         void start( bool FromBeginning, bool SkipThresholdDetection ) { startRecording( FromBeginning, SkipThresholdDetection ); }
-        void play( double FromSeconds ) { startPreview( FromSeconds ); }
+        /// PLAY / PLAY START keys on the looper screen: same as setPlay(); a stopped looper
+        /// starts at FromSeconds. A running loop is not restarted, so it stays in time with
+        /// the sequencer the screen may have started alongside it.
+        void play( double FromSeconds )
+        {
+            stopRecording();
+            setOverdub( false );
+            if( !isPreviewing() )
+                startPreview( FromSeconds );
+        }
         void stop() override
         {
             stopRecording();
             stopPreview();
+            setOverdub( false );
         }
         void clear() { reset(); }
         void undo();

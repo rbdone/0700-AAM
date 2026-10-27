@@ -164,10 +164,12 @@ namespace mt
             return in;
         }
 
-        if( spec == "pulse" )
+        if( spec == "pulse" || spec.startsWith( "pulse:" ) )
         {
             in->kind = Kind::pulse;
-            juce::Logger::writeToLog( "TestInput: 1 kHz 50 ms pulse every 500 ms replaces the device input" );
+            if( spec.startsWith( "pulse:" ) )
+                in->pulsePeriod = juce::jlimit( 0.06, 60.0, spec.fromFirstOccurrenceOf( ":", false, false ).getDoubleValue() / 1000.0 );
+            juce::Logger::writeToLog( "TestInput: 1 kHz 50 ms pulse every " + juce::String( juce::roundToInt( in->pulsePeriod * 1000.0 ) ) + " ms replaces the device input" );
             return in;
         }
 
@@ -219,7 +221,7 @@ namespace mt
 
                 case Kind::pulse:
                 {
-                    const auto period = (int64_t)( sampleRate * 0.5 );
+                    const auto period = (int64_t)std::llround( sampleRate * pulsePeriod );
                     const auto inBeat = position % period;
                     if( inBeat < (int64_t)( sampleRate * 0.05 ) )
                         l = r = pulseGain * (float)std::sin( juce::MathConstants<double>::twoPi * 1000.0 * (double)inBeat / sampleRate );

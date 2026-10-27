@@ -6,6 +6,7 @@
 #                                           # performs that SHIFT function)
 #   Kick/tools/sim_ctl.sh click NAME...     # on-screen components by title ("WiFi", "Resources")
 #   Kick/tools/sim_ctl.sh tap X Y           # touch pixel (X,Y) of the 1024x600 Kick screen
+#   Kick/tools/sim_ctl.sh turn P1 -18       # turn P1..P4 or JOG by N detents (negative = anticlockwise)
 #   Kick/tools/sim_ctl.sh shot OUT.png      # render the panel (and popups as OUT-<n>.png)
 #   Kick/tools/sim_ctl.sh list [FILTER]     # titled components, printed from the app log
 #   Kick/tools/sim_ctl.sh echo TEXT         # write a marker line into the app log
@@ -50,11 +51,12 @@ case "$CMD" in
     press|click)
         for NAME in "$@"; do send "$CMD $(q "$NAME")"; sleep 0.2; done ;;
     tap)  send "tap $1 $2" ;;
+    turn) send "turn $1 $2" ;;
     shot)
         case "$1" in /*) OUT=$1 ;; *) OUT="$(pwd)/$1" ;; esac
         send "shot $(q "$OUT")"
         printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: shot \([^ ]*\).*/\1/p' ;;
     list) send "list $(q "$*")"; printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: item //p' ;;
     echo) send "echo $*" ;;
-    *) sed -n '2,17p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,18p' "$0" >&2; exit 2 ;;
 esac
