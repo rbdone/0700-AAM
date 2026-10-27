@@ -559,9 +559,15 @@ namespace sim
 
         // Q-Link encoders P1..P4 and the jog wheel: endless, like the unit. The app only ever
         // receives a direction and a step count.
+        // Named for scripts (SimControl "turn P1 3", "turn JOG -1", "slider 40").
         for( int i = 0; i < 4; ++i )
+        {
             setupEncoder( qlinks[i], DCC::EN_KNOB_1 + i, DCC::EN_KNOB_QLINK );
+            qlinks[i].setName( "P" + juce::String( i + 1 ) );
+        }
         setupEncoder( jog, DCC::EN_KNOB_CENTER, DCC::EN_KNOB_ROTARY );
+        jog.setName( "JOG" );
+        slider.setName( "SLIDER" );
 
         // Slider: absolute, 0..100 %...
         slider.setSliderStyle( juce::Slider::LinearVertical );
@@ -737,9 +743,18 @@ namespace sim
         const auto& d = msg.data;
         if( msg.pktCmd == DCC::EN_LED_SET_SINGLE_LED || msg.pktCmd == DCC::EN_LED_BLINK_SINGLE )
         {
-            if( d.size() >= 2 )
-                if( auto it = buttonsById.find( d[0] ); it != buttonsById.end() )
-                    it->second->setLed( d[1] != DCC::StateOff );
+            if( d.size() < 2 ) return;
+            int id = d[0];
+            // Banks: the app only ever sends "bank N on" (kick_leds.cpp, setBankMessage) and never
+            // switches the previous bank off, so the surface shows one bank at a time. Banks E-H
+            // are SHIFT + A-D and light the key they are printed under.
+            if( id >= DCC::EN_BANK_A && id <= DCC::EN_BANK_H && d[1] != DCC::StateOff )
+            {
+                for( int b = DCC::EN_BANK_A; b <= DCC::EN_BANK_D; ++b ) buttonsById[b]->setLed( false );
+                id = DCC::EN_BANK_A + ( id - DCC::EN_BANK_A ) % 4;
+            }
+            if( auto it = buttonsById.find( id ); it != buttonsById.end() )
+                it->second->setLed( d[1] != DCC::StateOff );
         }
         else if( msg.pktCmd == DCC::EN_LED_SET_ALL )
         {

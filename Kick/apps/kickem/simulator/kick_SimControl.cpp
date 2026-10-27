@@ -7,6 +7,7 @@
  */
 
 #include "kick_SimControl.h"
+#include "kick_Simulator.h"
 
 #include <typeinfo>
 
@@ -168,6 +169,27 @@ namespace sim
                     return false;
                 } );
             return ok();
+        }
+
+        if( cmd == "turn" || cmd == "slider" )
+        {
+            // Encoders: one EN_PKT_TYPE_KNOBS packet of magnitude 1 per detent, through the same
+            // onStep callback a mouse drag uses. Slider: one absolute 0..100 value.
+            const auto name = cmd == "slider" ? juce::String( "SLIDER" ) : tok[0].toUpperCase();
+            auto*      c    = findIn( *panel.getTopLevelComponent(), [&]( juce::Component& C ) { return C.getName() == name; } );
+            if( auto* knob = dynamic_cast<EndlessKnob*>( c ); knob != nullptr && cmd == "turn" && tok.size() == 2 && knob->onStep )
+            {
+                const int steps = tok[1].getIntValue();
+                for( int i = 0; i < std::abs( steps ); ++i )
+                    knob->onStep( steps > 0 ? 1 : -1 );
+                return ok();
+            }
+            if( auto* s = dynamic_cast<juce::Slider*>( c ); s != nullptr && cmd == "slider" && tok.size() == 1 )
+            {
+                s->setValue( juce::jlimit( 0, 100, tok[0].getIntValue() ), juce::sendNotificationSync );
+                return ok();
+            }
+            return fail( "usage: turn P1..P4|JOG <steps> | slider <0..100>" );
         }
 
         if( cmd == "echo" )

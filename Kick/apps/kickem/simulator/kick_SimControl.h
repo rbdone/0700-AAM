@@ -26,6 +26,8 @@ namespace sim
     ///                       ("Pad 1", MAIN, PUSH, "key 45", or a caption such as GRID)
     ///   click NAME          touch the on-screen component titled NAME (Kick screen and popups)
     ///   tap X Y             touch pixel (X,Y) of the 1024x600 Kick screen
+    ///   turn KNOB STEPS     turn encoder P1..P4 or JOG by STEPS detents (negative = anticlockwise)
+    ///   slider VALUE        move the slider to VALUE (0..100)
     ///   shot FILE.png       render the panel window to FILE.png and every other visible app
     ///                       window (the full-screen popups) to FILE-<n>.png
     ///   list [FILTER]       log the titled, showing components ("SimControl: item ...")
