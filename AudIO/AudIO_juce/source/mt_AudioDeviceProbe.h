@@ -56,6 +56,7 @@ namespace mt
     /// Opt-in replacement for the device input (reconstruction tooling). Enabled by setting
     /// KICK_SIM_AUDIO_INPUT to one of:
     ///
+    ///     silence       digital silence (no microphone, no feedback through the speakers)
     ///     tone          1 kHz sine at -12 dBFS, continuous
     ///     tone:<hz>     sine at that frequency, -12 dBFS
     ///     pulse         1 kHz bursts of 50 ms every 500 ms (120 BPM quarter notes), -6 dBFS
@@ -74,7 +75,7 @@ namespace mt
         void render( float* const* Channels, int NumChannels, int NumSamples ) noexcept;
 
     private:
-        enum class Kind { tone, pulse, file };
+        enum class Kind { silence, tone, pulse, file };
         TestInput() = default;
 
         Kind                     kind{ Kind::tone };

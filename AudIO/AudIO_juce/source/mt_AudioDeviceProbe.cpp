@@ -164,6 +164,13 @@ namespace mt
             return in;
         }
 
+        if( spec == "silence" )
+        {
+            in->kind = Kind::silence;
+            juce::Logger::writeToLog( "TestInput: silence replaces the device input" );
+            return in;
+        }
+
         if( spec == "pulse" || spec.startsWith( "pulse:" ) )
         {
             in->kind = Kind::pulse;
@@ -212,6 +219,9 @@ namespace mt
             float l = 0.f, r = 0.f;
             switch( kind )
             {
+                case Kind::silence:
+                    break;
+
                 case Kind::tone:
                     l = r = toneGain * (float)std::sin( phase );
                     phase += juce::MathConstants<double>::twoPi * frequency / sampleRate;

@@ -2,7 +2,8 @@
 # Drive the running simulator from inside the app: no accessibility, no window server.
 #
 #   Kick/tools/sim_ctl.sh press NAME...     # front-panel controls by printed name ("Pad 1", MAIN,
-#                                           # PUSH, "key 45"; a caption such as GRID or PREFS
+#                                           # PUSH, PLAY/STOP/RECORD/OVERDUB/PLAYSTART or "key 45";
+#                                           # a caption such as GRID or PREFS
 #                                           # performs that SHIFT function)
 #   Kick/tools/sim_ctl.sh click NAME...     # on-screen components by title ("WiFi", "Resources")
 #   Kick/tools/sim_ctl.sh tap X Y           # touch pixel (X,Y) of the 1024x600 Kick screen
@@ -47,10 +48,24 @@ send() {   # send "<command line>"; waits for the ack
 
 q() { printf '"%s"' "$1"; }   # quote one argument for the app's tokenizer
 
+# Transport keys carry icons, not text: accept their names as sim_press.sh does.
+key_name() {
+    case "$1" in
+        RECORD|REC) echo "key 42" ;;
+        OVERDUB)    echo "key 43" ;;
+        STOP)       echo "key 44" ;;
+        PLAY)       echo "key 45" ;;
+        PLAYSTART|"PLAY START") echo "key 46" ;;
+        *)          echo "$1" ;;
+    esac
+}
+
 CMD=$1; shift || true
 case "$CMD" in
-    press|click)
-        for NAME in "$@"; do send "$CMD $(q "$NAME")"; sleep 0.2; done ;;
+    press)
+        for NAME in "$@"; do send "press $(q "$(key_name "$NAME")")"; sleep 0.2; done ;;
+    click)
+        for NAME in "$@"; do send "click $(q "$NAME")"; sleep 0.2; done ;;
     tap)  send "tap $1 $2" ;;
     turn) send "turn $1 $2" ;;
     slider) send "slider $1" ;;
@@ -60,5 +75,5 @@ case "$CMD" in
         printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: shot \([^ ]*\).*/\1/p' ;;
     list) send "list $(q "$*")"; printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: item //p' ;;
     echo) send "echo $*" ;;
-    *) sed -n '2,19p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,20p' "$0" >&2; exit 2 ;;
 esac
