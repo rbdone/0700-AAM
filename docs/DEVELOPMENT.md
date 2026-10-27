@@ -128,8 +128,9 @@ LEDs sent by the app are shown.
 What was verified on macOS: the simulator starts, the app opens the default audio device at
 48 kHz with a 480-sample block, the control-surface handshake completes, pressing the jog wheel
 loads the selected project, and the LED packets the app sends back light the matching keys
-(STOP, bank A, MAIN, FULL LEVEL). Pads show no colours in a fresh checkout because the factory
-samples are not part of the release, so no program has anything assigned.
+(STOP, bank A, MAIN, FULL LEVEL). The factory samples are not part of the release; since phase 2
+the first project on the Projects screen is the synthesised Starter Kit (4.4), whose pads light
+and play.
 
 Where it lives: `Kick/apps/kickem/`. `simulator/kick_Simulator.cpp` holds the panel geometry (in
 canvas units measured from a top-down photo of the unit), the drawing, and the packet
@@ -198,6 +199,138 @@ bindings:
 | `0 - = P [ ]` | FULL LEVEL, NOTE REPEAT, 16 LEVELS, HALF LEVEL, LATCH, NOTES |
 | Shift | SHIFT |
 
+### 4.4 Starter content (phase 2)
+
+The public release ships empty demo and template projects and no samples, so a fresh checkout
+now carries a small kit and a project that are ours to ship (CC0, `Kick/assets/StarterKit/LICENSE`).
+
+**The kit.** `Kick/tools/make_starter_kit.py` synthesises everything with the Python standard
+library from fixed seeds (no recordings, no numpy): running it again rewrites byte-identical
+files. All WAVs are 48 kHz, 16-bit mono (the engine loads mono as two equal channels), about
+1.4 MB in all, and they are committed so nothing needs Python at build time.
+
+| Folder (`Kick/assets/StarterKit/`) | Contents |
+|---|---|
+| `Kit/` | 16 drums in pad order: 01 Kick, 02 Snare, 03 Closed Hat, 04 Open Hat, 05 Clap, 06 Rim, 07-09 Low / Mid / High Tom, 10 Crash, 11 Ride, 12 Shaker, 13 Cowbell, 14 Conga, 15 Clave, 16 Zap |
+| `Instruments/` | `Keys C4.wav` (additive e-piano tone), `Bass C2.wav` (filtered saw / square) |
+| `Loops/` | `Drum Loop 120.wav`, `Bass Loop 120.wav` (one bar at 120 BPM), `Chord Stab.wav`, `Riser.wav` |
+| `Metronome/` | `Click.wav` (1.2 kHz, the beat) and `Click Accent.wav` (2 kHz, the bar) |
+
+Regenerate with `python3 Kick/tools/make_starter_kit.py`, then configure again (the copies into
+`Kick/build` happen at configure time, see below).
+
+**The project.** The same script writes `Kick/demos/Starter Kit/Starter Kit.kickPrj`, its 120x70
+`Starter Kit.png`, and the 180x130 tile `assets/Default/recent_project/Starter Kit.png` (the
+Projects screen draws a demo's tile from the theme, named after the PNG in the project folder).
+Demos are sorted by the number in their name and "Starter Kit" has none, so it is the first tile
+on the Projects screen and selected on start; PUSH (or a touch) loads it.
+
+| Program | Type | Pads |
+|---|---|---|
+| Starter Drums | Drum (0) | bank A: the 16 kit sounds; B: keys, C: bass, chromatic from C (pad n = n-1 semitones up); D: pads 1-4 the loops / stab / riser, 5-16 kit sounds 1-12 a fifth lower |
+| Starter Keys | Drum (0) | keys C3-B6 over banks A-C, bass C2-D#3 on D. A drum program because the keygroup engine is a stub in this release (`KeygroupProgram::noteOn` returns before playing anything; the SoundFont is not involved) |
+| Starter Loops | Clip (4) | pads 1-4 the loops, stab and riser, one-shot (`padPlay="1"`) |
+
+`Sequence 01` (4 bars, 120 BPM, looping) has three tracks: **Drums** (Starter Drums, a pattern
+that plays every one of the 16 kit pads), **Keys** (Starter Keys, a chord on beats 1 and 3,
+level 70) and **Loops** (Starter Loops, the bass loop every bar, level 80). Pads play the
+selected track's program (track 1 after loading). Bank keys move the pads by 16 notes within that
+program, so banks B-D of Starter Drums are what a pad reaches after pressing B, C or D; to play
+Starter Keys or Starter Loops from the pads, select their track.
+
+**Project schema** (learned from `modules/engine/` and from what the app writes back on SAVE;
+the `IDs::` names are in `interface/source/mt_audio_ids.h`; properties left out take the engine
+defaults):
+
+```xml
+<ROOT name=".." manufacturer="Musictribe" version="0.1" ...>
+  <BUSES/>
+  <FILEMANAGER id="..">                        <!-- MTAudioAssetManager -->
+    <ASSETS>
+      <FILE id=".." path="StarterKit/Kit/01 Kick.wav">   <!-- one per sample file -->
+        <SLICE id=".."/>                        <!-- slice 0; more slices = regions or tunings -->
+        <SLICE id=".." semi="7"/>               <!-- ASoundSlice: semi, fine, gain, pan, loopStart/End, reverse, loop -->
+      </FILE>
+    </ASSETS>
+    <AUDIO/><EXPORTS/>
+  </FILEMANAGER>
+  <TEMPOS><TEMPO bpm="120.0" num="4" den="4"/></TEMPOS>
+  <PROGRAMS>
+    <PROGRAM id="skPrg001" name="Starter Drums" type="0">   <!-- MTProgramType: 0 Drum, 1 Keygroup, 2 Midi, 3 Audio, 4 Clip, 6 CV -->
+      <COLOURS clr16="6" .../>                  <!-- pad colour ids (DeviceControlContracts::PadColourIds); the default table colours pads 1-16 only -->
+      <CLIPS>
+        <CLIP keyNote="0" minNote="0" maxNote="0">         <!-- one per pad; keyNote = pad - 1 + 16 x bank (0-127) -->
+          <LAYERS>                              <!-- always 4 LAYERs -->
+            <LAYER source="StarterKit/Kit/01 Kick.wav" slice="0"/>  <!-- source = FILE path string, slice = SLICE index -->
+            <LAYER/><LAYER/><LAYER/>
+          </LAYERS>
+        </CLIP>
+      </CLIPS>
+    </PROGRAM>
+  </PROGRAMS>
+  <SEQUENCES>
+    <SEQUENCE id=".." name="Sequence 01" length="4" loop="1" loopStart="0" loopEnd="4" isMasterBPM="1">
+      <TRACK id=".." name="Drums" program="skPrg001" usingSequenceLength="1" length="4" level="100">
+        <NOTELIST>
+          <NOTE id="1" no="0" velocity="120" start="0" length="24"/>  <!-- ticks at 96 PPQN: 16th = 24, bar = 384 -->
+        </NOTELIST>
+      </TRACK>
+    </SEQUENCE>
+  </SEQUENCES>
+</ROOT>
+```
+
+Things that matter: a track's `length` defaults to 0, so set `usingSequenceLength="1"` (or a
+length). The drum voice ignores a CLIP's own `semi` / `fine` (only the program's pitch reaches
+`DrumVoice`), so a tuned pad is a tuned SLICE of the file; that is how the starter kit does its
+chromatic pads. The sound cache and the layers key samples by the full path string, so FILE
+`path` and LAYER `source` must be the same string. On load the app adds `Project`, `LOOPER`,
+`SAMPLER`, `SONGS`, per-slice loop points and `COLOURS mode`, and rewrites relative paths as
+absolute (below); SAVE (SHIFT + BROWSE) then writes back the same programs, pads, slices, tracks
+and notes. A demo is loaded and saved in place, i.e. in `Kick/build/demos/`.
+
+**Where samples resolve.** Sample paths are stored as strings and opened with `juce::File`, so a
+project in the repository cannot hold absolute paths. On desktop builds only (`SIM_BUILD` or
+`JUCE_MAC`), `MTAudioManager::loadProject` now resolves every relative FILE `path` and SLICE /
+LAYER `source` first against the project's folder, then against the samples root
+(`getAppDirs( MTSamples )`, `./data/samplesKick/` on desktop), and replaces it with the absolute
+path before anything reads it. Absolute paths, which is all the device ever writes, are left
+alone, and the device build does not compile the code. CMake (`apps/kickem`, and `apps/kick` on
+macOS) copies `assets/StarterKit` to `build/data/samplesKick/StarterKit` at configure time, so the
+kit also shows in the sample browser, and the project names its samples `StarterKit/...`.
+
+**Metronome.** The factory click files named by `KickMetronome` (`met-1-bar.wav`,
+`Perc_*_hi.wav`, ...) are not in the release. `mt::Metronome::setSource`
+(`audio_program/synth/metronome.cpp`) now falls back to `assets/StarterKit/Metronome/Click.wav`
+when the configured file does not exist, and loads `Click Accent.wav` beside it for the bar
+(note 0 from `triggerBar`; note 1 from `triggerBeat` keeps the plain click). With the factory
+files present nothing changes. Turn it on with the Metronome button in the top bar (ENABLE On);
+it clicks while the sequencer plays, at the selected RATE (1/4 by default).
+
+**Measured** (2026-10-27, `KICK_SIM_AUDIO_INPUT=<silent wav>`, probe on, everything through
+`sim_ctl.sh` with the screen locked): Pads 1-16 in bank A give 16 separate hits at -9.2 to -19.0
+dBFS peak from a -120 dBFS floor, each with its own brightness (from 140 zero crossings per second
+for the kick to 11300/s for the open hat); bank B pads 1 / 8 / 16 play the keys at C4 / G4 / D#5
+(260 / 390 / 620 zero crossings per second), bank C the bass at C2 / G2 / D#3, bank D the drum
+loop, the bass loop and the shaker a fifth down; PLAY runs the sequence with all three track
+meters moving; with the metronome on, PLAY START puts a 2 kHz accent on the bar and a 1.2 kHz
+click on each following quarter (0.5 s apart), 20-30 dB above the neighbouring band. Bank A pads
+light in the kit's colours (`SimSurface: PAD cmd=6 data=12,13,14,9,...`), B sky blue, C green,
+D pink / orange.
+
+Known differences, left to later phases: a pad plays about 8 dB under the sample's level (-9.2
+dBFS for the kick normalised to -1 dBFS, velocity 100; the gain staging Phase 4 also measured).
+While the sequence plays, the master peaks at about +3 dBFS although the keys track is at level 70
+and velocity 64, so track level / note velocity may not be applied in sequencer playback, or
+notes are triggered more than once (Phase 3). With the default input device, loading any project
+with programs starts input monitoring through the looper / recorder path: on a laptop the built-in
+microphone picks up the speakers and the output howls to +30 dBFS within seconds. Use
+`KICK_SIM_AUDIO_INPUT` (a silent WAV, or `tone`) or headphones.
+
+Fixed on the way: PUSH on the Projects screen loaded an empty project (`onMouseDown` was handed
+`juce::File()`); for demos and templates it now takes the item's own folder
+(`kick_RecentProject.cpp`).
+
 ### 4.5 Hardware-only screens in the simulator
 
 Some screens exist only to drive the unit's own hardware or Linux. In the simulator each now opens,
@@ -247,7 +380,7 @@ simulator with a test input and the probe, e.g.
 
 | Step | Commands | What happens |
 |---|---|---|
-| Load a project | `tap 110 150` (the first tile, Demo 01) | Use a touch: PUSH on the Projects screen currently loads an empty project with no directory (see 5.1, Phase 4 findings), and then the sampler cannot save. |
+| Load a project | `tap 110 150` (the first tile) | A touch or PUSH. PUSH used to load an empty project with no directory (see 5.1, Phase 4 findings); fixed in phase 2 (4.4). Since phase 2 the first tile is Starter Kit, which already has programs and tracks. |
 | Make a pad playable | `tap 76 108` (the Sequence tab: its name is " Sequence "), `tap 993 108`; `click Program`, `tap 993 108`, `click Drum`, `click Apply`; `click Track`, `tap 993 108`, `tap 33 222`, `click "Program 01"`, `click Apply` | MAIN screen tabs and their "+": a sequence (it gives the looper its tempo), a drum program, and a track that plays it. Pads play the selected track's program. |
 | Record | `press SAMPLER`, `turn P1 -18` (Max Length 20 s -> 2 s; P1 = seconds, P2 = minutes), `click recordButton` | "Waiting for Signal" until the input crosses the threshold, then records and stops by itself at Max Length; touching the button again stops early. |
 | Preview | `click Play` | Plays the take once through the master. |
@@ -352,6 +485,7 @@ and no cmake file. Added:
     - PUSH on the Projects screen calls `onMouseDown( selectedIndex, juce::File() )`
       (`kick_RecentProject.cpp`), i.e. loads an empty project with no directory; the sampler then
       tries to save to `/New Sample.wav`. A touch on the tile loads the project properly.
+      Fixed in phase 2: for demos and templates the handler now uses the item's own folder.
     - A pad's sample source is a `CachedValue` path: after SAMPLE EDIT rewrites the file,
       assigning the same file again does not reload it, so the pad plays the old audio until
       the project is reloaded.
@@ -392,13 +526,22 @@ the stub emits a compiler warning in non-simulator Linux builds so this cannot b
   (`mt::Kick::HwControlCommands`, `sig::Signal`, `AppHome`), so it predated the move to the
   `contracts` module. The new one boots like `apps/kick/Main.cpp` and reuses its adapters.
 - Root `.gitignore` for the CPM cache.
+- Phase 2 (details in 4.4): `engine/audio_engine/engine/mt_audio_manager.cpp` resolves relative
+  sample paths on load (desktop only, `SIM_BUILD` / `JUCE_MAC`); `engine/audio_program/synth/
+  metronome.{h,cpp}` fall back to the starter click set with a bar accent when the configured click
+  file is missing; `kick_ui/recent_project/kick_RecentProject.cpp` makes PUSH load the selected
+  demo / template instead of an empty project; `apps/kickem/CMakeLists.txt` (and
+  `apps/kick/CMakeLists.txt` on macOS) copy the kit to `build/data/samplesKick/StarterKit`.
 
-### 5.4 Still missing from the release (unchanged)
+### 5.4 Still missing from the release
 
 - The Myriad Pro font: `assets/Default/theme.xml` asks for `Myriad Pro Regular.ttf`. If the file is
   absent the app silently uses JUCE's default sans-serif. Drop any `.ttf` you have rights to into
   `Kick/assets/Default/` and name it in `theme.xml`.
-- Factory samples and the General MIDI SoundFont: the sampler starts empty.
+- Factory samples, metronome sounds and the General MIDI SoundFont. Phase 2 replaces the samples
+  and clicks with the synthesised starter kit (4.4). The factory demo / template projects are still
+  empty `<ROOT>` documents, and keygroup programs stay silent: `KeygroupProgram::noteOn` is a stub
+  in this release.
 - The cross-compilation SDK: device builds still need the Buildroot SDK as described in
   `Kick/README.md`. None of the desktop changes alter the device code paths, except the serial
   stub (5.2), which must be replaced for a device build.

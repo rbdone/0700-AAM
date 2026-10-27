@@ -34,6 +34,12 @@ set(TargetSrc_DIR ".")
 file(COPY "${CMAKE_SOURCE_DIR}/demos" DESTINATION "${CMAKE_BINARY_DIR}")
 set(TargetSrc_DIR ".")
 
+## Desktop (macOS) samples root: the starter kit, see docs/DEVELOPMENT.md 4.4. The device reads
+## samples from /data/sounds and is not affected.
+if(APPLE)
+    file(COPY "${CMAKE_SOURCE_DIR}/assets/StarterKit" DESTINATION "${CMAKE_BINARY_DIR}/data/samplesKick")
+endif()
+
 
 ## Generate configuration file...
 configure_file(${CMAKE_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)

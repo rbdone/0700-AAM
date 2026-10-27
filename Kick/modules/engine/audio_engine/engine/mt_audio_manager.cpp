@@ -21,6 +21,34 @@
 
 namespace mt
 {
+#if defined( SIM_BUILD ) || JUCE_MAC
+    /// Desktop / simulator only: a project may name its samples by a path relative to its own
+    /// folder or to the samples root (getAppDirs( MTSamples ), ./data/samplesKick/ on desktop),
+    /// so content such as demos/Starter Kit can ship without machine-specific absolute paths.
+    /// Every FILE path, SLICE / LAYER source is made absolute before anything reads it; the sound
+    /// cache and the program layers key sounds by that full path string. Absolute paths (all the
+    /// device ever writes) are left alone.
+    static void resolveRelativeSamplePaths( juce::ValueTree VT, const juce::File& ProjectDir )
+    {
+        for( const auto& property : { IDs::path, IDs::source } )
+        {
+            const auto value = VT.getProperty( property ).toString();
+            if( value.isEmpty() || juce::File::isAbsolutePath( value ) )
+                continue;
+            for( const auto& root : { ProjectDir, getAppDirs( MTSamples ) } )
+            {
+                const auto file = root.getChildFile( value );
+                if( file.existsAsFile() )
+                {
+                    VT.setProperty( property, file.getFullPathName(), nullptr );
+                    break;
+                }
+            }
+        }
+        for( auto child : VT )
+            resolveRelativeSamplePaths( child, ProjectDir );
+    }
+#endif
 
     ///
     /// MTAudioManager
@@ -157,6 +185,9 @@ namespace mt
         //DBG( "LP: FM2: " << engine.getFeeMemory() );
         undoManager.clearUndoHistory();
         vTree = projectManager::loadOrCreate( ProjectFile );
+#if defined( SIM_BUILD ) || JUCE_MAC
+        resolveRelativeSamplePaths( vTree, juce::File( projectManager::getProjectDir() ) );
+#endif
 
 #if defined( USE_VALUE_TREE_DEBUGGER ) && ( USE_VALUE_TREE_DEBUGGER > 0 )
         debugger.setSource( vTree );

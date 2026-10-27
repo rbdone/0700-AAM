@@ -14,6 +14,9 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 file(COPY "${CMAKE_SOURCE_DIR}/assets"    DESTINATION "${CMAKE_BINARY_DIR}")
 file(COPY "${CMAKE_SOURCE_DIR}/templates" DESTINATION "${CMAKE_BINARY_DIR}")
 file(COPY "${CMAKE_SOURCE_DIR}/demos"     DESTINATION "${CMAKE_BINARY_DIR}")
+## ...and the starter kit where the desktop sample browser and the Starter Kit project look for
+## samples (getAppDirs( MTSamples ) is ./data/samplesKick/ on desktop; docs/DEVELOPMENT.md 4.4).
+file(COPY "${CMAKE_SOURCE_DIR}/assets/StarterKit" DESTINATION "${CMAKE_BINARY_DIR}/data/samplesKick")
 
 ## Generate config.h (included by modules/common/common.h) the same way apps/kick does...
 set(TargetSrc_DIR ".")
