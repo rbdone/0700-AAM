@@ -182,17 +182,17 @@ turned on.
 
 | Control | Packet id | Handler(s) | Device behaviour | Observed in simulator | Status | Gap class |
 |---|---|---|---|---|---|---|
-| PLAY | `EN_PLAY` (45) | Current screen (Main: `ae.setSequencePlay`) | Plays the current sequence; PLAY LED; counter runs. | `register handle command`; no PLAY LED; BAR:BEAT:TICK stayed `0:01:000`; silence. Same in NEXT SEQ. | missing | content |
-| STOP | `EN_STOP` (44) | Current screen → `setSequencePause` | Stops; STOP LED. | `LED 44,1,1` (STOP lit). | works | none |
-| PLAY START | `EN_PLAYSTART` (46) | Current screen | Plays from bar 1. | Handled; nothing. | missing | content |
-| RECORD | `EN_RECORD` (42) | Looper only (`record(false)`) | Records pad hits into the sequence; arms the looper. | On MAIN: nothing; no main-screen handler exists. In LOOPER: the record button lit. | partial | code (main) / content |
-| OVERDUB | `EN_OVERDUB` (43) | Looper only (`record(true)`) | Overdubs into the sequence or loop. | On MAIN: nothing. In LOOPER: handled. | partial | code / content |
+| PLAY | `EN_PLAY` (45) | Current screen (Main: `ae.setSequencePlay`) | Plays the current sequence from the current position; PLAY LED; counter runs. | Phase 3 (`sim_transport.sh`, Starter Kit): STOP at `3:04:049`, PLAY: `4:03:022` 0.8 s later (resumes); `LED 45,1,1`, STOP unlit on the panel; sequence peaks -3.0 dBFS (was +2.6, clipping). | works | none (engine fixes, see Phase 3) |
+| STOP | `EN_STOP` (44) | Current screen → `setSequencePause`; `KickHome` (ends a take) | Stops (position kept); STOP LED; ends recording. | `LED 44,1,1`; BAR:BEAT:TICK holds; probe -120 dBFS from 0.1 s after; RECORD / OVERDUB LEDs off (`42,0`, `43,0`). | works | none |
+| PLAY START | `EN_PLAYSTART` (46) | Current screen → `MTAudioTransportManager::play` (`startPlayback( Seq, false )`) | Plays from bar 1. | STOP at `2:03:083`, PLAY START: `1:03:068` 0.8 s later; first note `SimNote: track 'Drums' tick 0` (tick 0 used to be skipped; after STOP it used to resume). | works | none (engine fix) |
+| RECORD | `EN_RECORD` (42) | `KickHome` (new; LOOPER keeps its own `record(false)`) → `setSequenceRecord` | Records pad hits into the sequence; arms the looper. | Arms while stopped (`LED 42,1`), PLAY START starts the take on the selected track; three hits at 1.72 / 3.55 / 5.74 s play back 8.000 / 7.990 / 8.000 s later; the take replaced the track's 65 old notes (`Record: ... 65 old notes erased, 3 notes`). | works | none (new code) |
+| OVERDUB | `EN_OVERDUB` (43) | `KickHome` (new; LOOPER keeps `record(true)`) → `setSequenceRecord` | Overdubs into the sequence or loop. | `LED 43,1`; two hits added, none erased (`5 notes`), all 5 play on the next pass; with Timing Correct on the starts snap to 1/16 (529 -> 528, 1279 -> 1272). | works | none (new code) |
 
 ## Loaded state: other keys
 
 | Control | Packet id | Handler(s) | Device behaviour | Observed in simulator | Status | Gap class |
 |---|---|---|---|---|---|---|
-| TAP TEMPO | `EN_TAP_TEMPO` (18) | none | Taps the tempo. | Three taps: `In screen 18` each; nothing. | missing | code |
+| TAP TEMPO | `EN_TAP_TEMPO` (18) | `KickHome` → `tapTempo()` (new) | Taps the tempo. | Phase 3: four taps 600 ms apart (`sim_ctl.sh repeat 600 4 "TAP TEMPO"`): `TapTempo: 4 taps, 600.5 ms apart -> 100 BPM`, `bpm=100`; from the next bar the loop repeats every 9.59-9.61 s (4 bars at 100 BPM). No LED flashing with the tempo. | works | none (new code) |
 | NOTE REPEAT | `EN_NOTE_REPEAT` (24) | `PadModifiers` (new); the panel now also sends its release | While held, held pads retrigger at the sequence's time-correct division (TC, 1/16 by default) at the sequence tempo, on the grid while the sequencer plays. | Phase 5: `LED 24,1` while held, `24,0` on release; holding the clave 1 s gives 9-10 onsets, median 120-130 ms (expected 125 ms; the engine applies live notes per 10 ms block). Works on MAIN, GRID, TRACK MIX, PROG EDIT, NOTES. | works | none |
 | MENU | `EN_MENU` (22) | Global (second switch) → `HomeOptions` | Menu of all modes. | Phase 5 (`sim_modes.sh`, Starter Kit): Menu grid; `LED 22,1,0`. Audit: jog +2, + and PUSH opened Next Sequence (`LED 22,0,0`, `LED 16,1,0`). | works | none |
 | SHIFT | `EN_SHIFT` (31) | Dispatcher only | Modifier: secondary functions, SHIFT + pad. | Press / release logged; panel toggle lit; SHIFT functions arrive as their own ids (above). | works | none |
@@ -343,3 +343,28 @@ LED checks, all passed. Results and screenshots: `docs/sim_audit/phase5_pads/`.
   nothing to edit; key releases are assumed for ERASE and NOTE REPEAT only (AppAssignSample already
   expects ERASE's release; the other keys stay press-only because several screens act on any
   button packet).
+
+## Phase 3 (transport, tempo, metronome, recording)
+
+Date: 2026-10-27. `Kick/tools/sim_transport.sh` (see `docs/DEVELOPMENT.md` 4.7) checks the
+transport rows above, TAP TEMPO, BAR:BEAT:TICK, gain staging, RECORD / OVERDUB and the metronome
+on the Starter Kit and measures them on the audio probe: last run all 21 checks passed. The NEXT SEQ crash fix was checked with four `sim_modes.sh` runs (NEXT SEQ pad 2 ok in all, no crash report).
+
+- **Metronome** (top-bar Metronome button, ENABLE On): clicks 0.59-0.60 s apart at 100 BPM, the
+  2 kHz accent on beat 1 of every bar including the first, 1.2 kHz on the others; ENABLE Off:
+  silent. MODE and LEVEL are applied now.
+- **Gain staging** (shared engine code, changes the device): a pad hit is now centred and at the
+  level its controls say (Pad 1 -13.3 dBFS: velocity, track level, program level, two pan laws);
+  TRACK MIX program LEVEL and PAD MIX pad LEVEL / PAN are heard (phase 5's "MIX levels" row now
+  passes: level 100 -> 50 takes Pad 1 from -13.3 to -19.3 dBFS). The playing sequence no longer
+  clips. Notes were not triggered twice.
+- **Crash fixed**: the intermittent SIGSEGV in `MTTrack::onTick` when NEXT SEQ switched sequences
+  at the loop end (the clock thread stopped the old tracks while the tick thread played them);
+  sequence changes now run on the tick thread and the tracks lock (DEVELOPMENT.md 5.1).
+- **Input**: loading a project does not monitor the input (measured); `sim_launch.sh` uses a
+  silent test input unless `KICK_SIM_AUDIO_INPUT` is set (`device` for the real one).
+- **Known issue**: PAD MIX P1 changes the engine's pad gain once, but the turn that restores it
+  (P1 +50 after -50) shows 1.00 on screen without reaching the engine, so pad A01 stays silent;
+  `sim_modes.sh` then fails "PAD MUTE pad 1" (4 of 4 runs on this branch; DEVELOPMENT.md 5.1).
+- **Still different**: no count-in; no TAP TEMPO LED flashing; RECORD records only notes that
+  reach the selected track through the pads / MIDI (no audio-track recording).

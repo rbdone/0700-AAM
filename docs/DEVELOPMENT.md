@@ -151,9 +151,11 @@ Everything a check needs is in `Kick/tools/` and works from any directory:
 | `sim_ctl.sh press\|click\|tap\|shot\|list\|echo ...` | The same jobs **from inside the app**, with no accessibility and no window server, so it keeps working while the Mac is locked or asleep or the window is covered. `press NAME` = panel control by printed name (as `sim_press.sh`), `click NAME` = on-screen component by title (as `sim_click.sh`), `tap X Y` = Kick-screen pixel, `shot OUT.png` = renders the panel to `OUT.png`, the Kick screen at its native 1024x600 to `OUT-screen.png` and each popup window to `OUT-<n>.png`, `list [FILTER]` = titled components, `echo TEXT` = marker in the log. Each command waits for the app's acknowledgement (`SimControl: ok <n>`), so a blocked message thread shows up as a timeout and exit status 1. `turn KNOB STEPS` turns encoder `P1`-`P4` or `JOG` by signed detents and `slider VALUE` sets the slider (0-100); see the next row. |
 | `sim_turn.sh P1..P4\|JOG STEPS`, `sim_turn.sh SLIDER V` | Shorthand for `sim_ctl.sh turn` / `slider`: the encoders and the slider are not buttons, so `sim_press.sh` cannot reach them. Each detent is one `EN_PKT_TYPE_KNOBS` packet of magnitude 1 (cmd `EN_KNOB_QLINK` for P1-P4, `EN_KNOB_ROTARY` for the jog wheel), sent through the knob's own `onStep`, the same path as a mouse drag; positive is clockwise. The slider sends one `EN_PKT_TYPE_SLIDER` / `EN_SLIDER_TOUCH_INPUT` packet with the absolute value. (Arrow up/down in 4.3 also turn the jog wheel, but only while the window has keyboard focus.) |
 | `sim_ctl.sh down NAME [VEL]`, `up NAME`, `hold NAME SECS [VEL]` | Hold a pad or key (section 4.9): `down` presses it and leaves it pressed, `up` releases it, `hold` does both with SECS in between and answers after the release. Pads take a velocity (1-127; the default is the pad's last one, 100 at start), e.g. `hold "Pad 1" 0.1 30` is one soft hit; `down ERASE`, `press "Pad 3"`, `up ERASE` is ERASE + pad. Packets are sent directly (no mouse state), so it works with the screen locked. |
+| `sim_ctl.sh repeat MS N NAME`, `clickat NAME FX FY`, `status` | `repeat` presses a panel control N times MS ms apart on an absolute schedule timed inside the app (TAP TEMPO at a known tempo); `clickat` touches a titled component at a fraction of its size (the On half of the METRONOME dialog's ENABLE: `clickat ENABLE 0.75 0.6`); `status` prints the engine's transport state, BAR:BEAT:TICK (1-based, as on screen), master BPM, the MIDI clock's tempo, the record mode and the metronome switch, e.g. `playing bbt=1:03:068 bpm=120 clock=120.0 rec=off metronome=off` (section 4.7). |
 | `sim_pads.sh [OUTDIR]` | The phase 5 check for pads, modifiers, encoders and the slider (section 4.9). |
+| `sim_transport.sh [OUTDIR]` | The phase 3 check (section 4.7): transport keys, BAR:BEAT:TICK, gain staging, RECORD / OVERDUB, TAP TEMPO and the metronome, measured on the audio probe. |
 | `sim_sampler_looper.sh [OUTDIR]` | The phase 4 check (section 4.6): sampler record / preview / save to a pad / trim, and looper record / loop / overdub, measured on the audio probe. |
-| `wav_measure.py FILE [--from S] [--to S] [--thr DB] [--onsets]` | Length, peak, RMS, extent above a threshold and burst onsets of a WAV (the probe or a recorded sample). Needs numpy. |
+| `wav_measure.py FILE [--from S] [--to S] [--thr DB] [--onsets [--freqs]] [--channels]` | Length, peak, RMS, extent above a threshold and burst onsets of a WAV (the probe or a recorded sample); `--channels` adds per-channel peak / RMS, `--freqs` the dominant frequency and peak of the 40 ms after each onset. Needs numpy. |
 
 `sim_ctl.sh` talks to `apps/kickem/simulator/kick_SimControl.cpp`, which `sim_launch.sh` always
 enables (`KICK_SIM_CONTROL=Kick/build/.sim_ctl`; the log path is kept in `Kick/build/.sim_log`).
@@ -174,8 +176,9 @@ Opt-in environment variables, all off by default:
 | Variable | Effect |
 |---|---|
 | `KICK_SIM_AUDIO_PROBE=<file.wav>` | `mt::AudioDevice` writes the engine's master output to that WAV (32-bit float) and logs `AudioProbe: t=<n>s peak=<x>dBFS rms=<y>dBFS` once per second of audio. Silence logs `-120.0dBFS`. |
-| `KICK_SIM_AUDIO_INPUT=silence`, `tone`, `tone:<hz>`, `pulse`, `pulse:<ms>` or `<file>` | `mt::AudioDevice` replaces the device input (every channel) with a test source: digital silence (use it on laptop speakers, see 4.4), a -12 dBFS sine (1 kHz by default), 50 ms 1 kHz bursts every 500 ms (or every `<ms>`) at -6 dBFS, or a looped audio file. The pulse train is counted in engine samples, so its onsets are exact in the probe. Use a period that does not divide the bar (e.g. `pulse:700`) to see a loop repeat: the pattern then repeats with the loop length, not the pulse period. Logged as `TestInput: ...`. |
+| `KICK_SIM_AUDIO_INPUT=silence`, `tone`, `tone:<hz>`, `pulse`, `pulse:<ms>`, `<file>` or `device` | `sim_launch.sh` sets `silence` when the variable is unset (see 4.7, "Input and feedback"); `device` keeps the real input. `mt::AudioDevice` replaces the device input (every channel) with a test source: digital silence (use it on laptop speakers, see 4.4), a -12 dBFS sine (1 kHz by default), 50 ms 1 kHz bursts every 500 ms (or every `<ms>`) at -6 dBFS, or a looped audio file. The pulse train is counted in engine samples, so its onsets are exact in the probe. Use a period that does not divide the bar (e.g. `pulse:700`) to see a loop repeat: the pattern then repeats with the loop length, not the pulse period. Logged as `TestInput: ...`. |
 | `KICK_SIM_CONTROL=<file>` | The simulator polls `<file>` for `sim_ctl.sh` commands (see above). `sim_launch.sh` sets it to `Kick/build/.sim_ctl`; without it nothing is polled. |
+| `KICK_SIM_LOG_NOTES=1` | The sequencer logs every note it plays: `SimNote: track 'Drums' tick 0 pos 0 note 0 velocity 94 id 1` (tick from the clock, position in the track, effective note and velocity, note id). `SIM_BUILD` only. |
 | `KICK_SIM_LOG_SURFACE=1` | The simulated surface logs every packet the app sends it: `SimSurface: LED cmd=0 data=44,1` (type, command, payload). LED commands are `DeviceControlContracts::LedCmd` (0 = set single LED: id, state), pad commands `PadCmd`. |
 
 Input from the panel is always logged by the app as `Data[0] From DCL:<id> cmd From DCL : <cmd>
@@ -331,6 +334,9 @@ notes are triggered more than once (Phase 3). With the default input device, loa
 with programs starts input monitoring through the looper / recorder path: on a laptop the built-in
 microphone picks up the speakers and the output howls to +30 dBFS within seconds. Use
 `KICK_SIM_AUDIO_INPUT` (a silent WAV, or `tone`) or headphones.
+*Phase 3 (4.7):* the pad level and the clipping are explained and fixed; notes are not triggered
+twice; and loading a project does **not** monitor the input (measured with a pulse test input and
+with the real microphone), see 4.7.
 
 Fixed on the way: PUSH on the Projects screen loaded an empty project (`onMouseDown` was handed
 `juce::File()`); for demos and templates it now takes the item's own folder
@@ -401,6 +407,77 @@ input; the preview and Pad 1 each play 2.000 s with silence before; Discard with
 leaves 72000 frames = 1.500 s, which is what Pad 1 plays after the project is reloaded; the
 looper's playback repeats with a period of 384000 samples = 8.000 s (4 bars at 120 BPM),
 successive periods sample-identical, and an overdub pass adds a second, offset pulse set.
+
+### 4.7 Transport, tempo and metronome (phase 3)
+
+`Kick/tools/sim_transport.sh [OUTDIR]` (default `Kick/build/logs/phase3`) does all of this on a
+fresh build copy of the Starter Kit in one session of about two minutes, prints the
+measurements, leaves the app log, probe WAV, `events.txt` and screenshots in OUTDIR and exits 1
+if a check fails. It runs with the screen locked (everything is `sim_ctl.sh`).
+
+| Key | What it does now | Where |
+|---|---|---|
+| PLAY | Plays from the current position: after STOP it resumes where it stopped. | each screen's `handleCommand` -> `setSequencePlay( seq, false, true )` |
+| PLAY START | Plays from the top (bar 1, tick 0), also after STOP. It used to resume like PLAY after STOP. | `MTAudioTransportManager::play( Seq, FromBeginning, Now )` -> `startPlayback( Seq, false )` |
+| STOP | Stops (pauses: the position is kept for PLAY); voices are cut; ends a RECORD / OVERDUB take and disarms it; RECORD / OVERDUB LEDs off. | `setSequencePause()`, `KickHome::handleCommand` |
+| RECORD | Arms (LED 42) while stopped; PLAY / PLAY START starts the take. While playing it punches in at once. Records pad hits into the **selected track** of the playing sequence. Replace: the track's old notes are not played during the take and those the playhead passed are erased when it ends (after one full pass the take simply goes on adding, like OVERDUB). Pressed again: disarm / punch out. | new, `KickHome::handleCommand` (every screen but LOOPER, which keeps RECORD for itself) -> `MTAudioInterface::setSequenceRecord` -> `MTAudioTransportManager::setRecordMode`, `MTTrack::startRecording / recordMidiMessage / stopRecording` |
+| OVERDUB | Same, but only adds notes (LED 43). | same |
+| TAP TEMPO | Two to four taps (a pause longer than one beat at 20 BPM restarts the count): the average interval of the last four becomes the selected sequence's BPM, or the master BPM when the sequence follows it. The clock takes it at the next bar. Logs `TapTempo: 4 taps, 600.5 ms apart -> 100 BPM`. | new, `tapTempo()` in `kick_AppHome.cpp` |
+
+A take records each pad (or MIDI) note on / off pair that reaches the selected track through
+`addLiveMidiMsg` (so pads already rewritten by FULL / HALF LEVEL, 16 LEVELS, NOTE REPEAT, 4.9),
+at the track position of the last tick played, with the hit's velocity and the held length (1 tick
+minimum). With Timing Correct on (ON/OFF, SHIFT + TC, 4.8) the start is snapped by
+`TimingCorrect::correct`. Each note is logged: `Record: note 12 velocity 100 at tick 528 (played
+at 529, timing corrected) length 20`, and each take: `Record: take on track 'Drums' ended after
+3718 ticks, 65 old notes erased, 3 notes`.
+
+**BAR : BEAT : TICK** (bottom right) runs while playing, holds on STOP, continues on PLAY and
+restarts at 1:01:000 on PLAY START. **Metronome**: the top-bar Metronome button opens METRONOME;
+ENABLE On clicks at RATE (1/4 default) with the 2 kHz accent on the first beat of every bar, at
+LEVEL; MODE PLAY (default) clicks while playing and not recording, RECORD only during a take,
+RECORD + PLAY always. MODE and LEVEL were stored but ignored before.
+
+Measured with `sim_transport.sh` on 2026-10-27 (all checks passed; `sim_ctl.sh status` gives the
+positions):
+
+- STOP at `3:04:049`, still `3:04:049` a second later; PLAY: `4:03:022` 0.8 s later (+261 ticks);
+  STOP at `2:03:083`, PLAY START: `1:03:068` 0.8 s later; the first note after PLAY START is
+  `SimNote: track 'Drums' tick 0`. After STOP the probe reads -120 dBFS from 0.1 s on.
+- Pad 1 (kick, sample peak -1.0 dBFS, velocity 100): -13.35 / -13.29 dBFS left / right (before:
+  -9.2 / -24.2). Sequence playback, 10 s: master peak -3.0 dBFS (before: +2.6 / -3.8 dBFS).
+- RECORD, three hits in pass 1 at 1.72 / 3.55 / 5.74 s after PLAY START, heard again in pass 2 at
+  9.72 / 11.54 / 13.74 s: 8.000 / 7.990 / 8.000 s later (one loop is 4 bars at 120 BPM = 8.000 s;
+  onsets are on 10 ms engine blocks). The take erased the track's 65 old notes and left 3. OVERDUB
+  with Timing Correct on added 2 (snapped 529 -> 528 and 1279 -> 1272, the 1/16 grid), erased
+  none, and the next pass played all 5.
+- TAP TEMPO, four presses 600 ms apart (`sim_ctl.sh repeat 600 4 "TAP TEMPO"`): `600.5 ms apart ->
+  100 BPM`, `status ... bpm=100`, and after the next bar the loop repeats every 9.59-9.61 s (4 bars
+  at 100 BPM = 9.6 s).
+- Metronome on, all tracks muted, 100 BPM: clicks 0.59-0.60 s apart at 1998 / 1201 / 1201 / 1201 Hz
+  per bar, the first one included; ENABLE Off: -120 dBFS while playing.
+
+**Gain staging.** A pad hit at velocity 100 on the starter kick (sample peak -1 dBFS) now comes out
+at -13.3 dBFS in both channels, which is the sum of what the controls say: velocity 100/127
+(-2.1 dB), track level 100/127 (-2.1 dB), program level 100/127 (-2.1 dB), the drum voice's
+equal-power pan law (-3 dB in the centre) and the program's equal-power pan (-3 dB). Before, the
+program gain and pan were applied twice, the velocity-to-pan default pushed every drum voice hard
+left, and neither a loaded track's level nor any program level was applied; details in 5.1. Phase 4's
+-20.2 dBFS for a -12 dBFS sampler take was the same chain.
+
+**Input and feedback.** Loading a project does not monitor the input: with a 1 kHz pulse train as
+input (`KICK_SIM_AUDIO_INPUT=pulse:1000`) and with the real default input (microphone), loading the
+Starter Kit left the probe at exactly -120 dBFS. The input reaches the output only through the
+SAMPLER and LOOPER MONITOR buttons (off by default; the device does the same). The Phase 2 howl was
+therefore not a default of the reconstruction. To keep a fresh run safe on laptop speakers anyway,
+`sim_launch.sh` now uses `KICK_SIM_AUDIO_INPUT=silence` unless the variable is set; pass `device`
+for the real input. The app itself is unchanged (started by hand it opens the default input, as
+the device opens its line input).
+
+Not covered: count-in (the dialog only offers Off), the TAP TEMPO LED that flashes with the tempo
+(the Hardware tab's "tap tempo LED" setting is stored, nothing drives it), RECORD in the step
+sequencer / grid edit screens beyond what their pads send through `addLiveMidiMsg`, and recording
+of Clip and Audio tracks. A take on a shorter track or with a non-zero loop start was not measured.
 
 ### 4.8 Mode keys (phase 5)
 
@@ -654,12 +731,96 @@ and no cmake file. Added:
       whatever LENGTH says (`LoopRecorder::getRecordingLength`).
     - With the threshold at its default (-100 dB) a looper take starts at the key press.
     - A pad plays a full-scale take about 8 dB lower than recorded (-20.2 dBFS for a -12 dBFS
-      take at velocity 100): voice / track gain staging, not the recorder.
+      take at velocity 100): voice / track gain staging, not the recorder. Explained and fixed
+      in phase 3 (below and 4.7).
   - Simulator tooling: `sim_ctl.sh turn P1..P4|JOG N` turns encoders (the sampler's Max Length
     and the sample editor's START need them; the knobs are told apart by geometry, the jog wheel
     being the largest); `sim_ctl.sh click` skips zero-size components (dialog contents such as
     CREATE PROGRAM carry unused 0x0 `Apply` / `Cancel` buttons that shadowed the real ones);
     `KICK_SIM_AUDIO_INPUT=pulse:<ms>`; `sim_sampler_looper.sh` and `wav_measure.py`.
+
+  **Phase 3 findings** (transport, sequencer, tempo, metronome, gain staging; 4.7). The
+  reconstructed glue in `AudIO/AudIO_juce/` turned out not to be the cause of the clipping, the
+  pad deficit or the timing problems: `mt::AudioDevice` ran with a device buffer equal to the
+  engine block (480), so no re-timing happened, and `mt::ADSR` / `mt::Filter` behave at the
+  default (unattached) envelope values. No value in `AudIO_constants.h` was changed. The causes
+  were in Kick's own engine code, which the device runs too, so **these change device behaviour**:
+  - `audio_program/synth/drum_voice.cpp`: the drum voice multiplied its output by the program's
+    master gain/pan, and `ISynthObject::postProcess` multiplied the sum of the voices by it again
+    (the only voice that did; clip and keygroup voices rely on `postProcess`). The voice now adds
+    at unity: -3 dB in the centre instead of -6 dB, and a program pan no longer counts twice.
+  - `audio_program/source/mt_audio_iprogram_atomics.h`: the amplitude envelope's velocity-to-pan
+    amount defaulted to 1, which `DrumVoice` maps through `jmap( 0..127 -> -1..1 )` to -0.98, so
+    every drum hit was panned by -0.98 x velocity: left -9.2 dBFS, right -24.2 dBFS for Pad 1. The
+    default is now 64 (the middle). The voice's envelope / LFO trees are never attached
+    (`DrumVoice::attachToAndReset` has no caller), so the default is all a drum voice ever sees.
+  - Same file: the program master now also scales by the program `level` (0..127, `/ 127` as
+    `CommonUtils::midiToGain`). TRACK MIX's program strip LEVEL wrote it but nothing read it
+    (phase 5's `sim_modes.sh` "MIX levels" row: level 100 -> 50 now takes Pad 1 from -13.3 to
+    -19.3 dBFS).
+  - Known issue, PAD MIX (UI, not the engine): since the pad gain is heard, `sim_modes.sh` shows
+    that after P1 -50 (pad A01 1.00 -> 0.00) the P1 +50 that restores it updates the slider on
+    screen but never calls `MTIProgram::setNoteGain` (logged: one call with 0, none with 1), so
+    pad A01 stays silent and the script's later "PAD MUTE pad 1" check fails (unmuted -120
+    dBFS); its "MIX levels" row reports `gap` because of the restore. Before the pad gain was
+    applied this was inaudible. With the merge of phase 5's pads / encoders it was consistent
+    (4 of 4 runs); before that merge the restore worked. Not investigated further (P1-P4 and
+    PAD MIX are phase 5 areas).
+  - `audio_program/synth/iSynthVoice.{h,cpp}`, `DrumProgram.cpp`, `drum_voice.cpp`: a drum pad's own
+    `gain` and `pan` (PAD MIX) are applied to the voice (velocity gain x pad gain; pad pan added to
+    the voice pan). They were stored per CLIP and ignored.
+  - `audio_engine/engine/mt_audio_track.cpp`: `levelScaler` (track level / 127, applied to note
+    velocities) was only set when the level property changed, so a loaded track played at x1.0
+    until its level was touched (the Keys track at 70 played at 100 %). It is set on load now.
+  - With these, the starter sequence peaks at -3.0 dBFS (it clipped at +2.6 dBFS). Notes were never
+    triggered twice: with `KICK_SIM_LOG_NOTES=1` every note of a pass is played once.
+  - `audio_file_manager/source/audio_sound_renderer.cpp`: a finished sample returns a shared static
+    silent sample, which `DrumVoice` filters in place; the filter's output was then fed back as
+    the next input for the rest of the block (a -32 dBFS, 900 Hz burst at the end of a drum
+    hit, measured on the snare). It is cleared on every read now.
+  - `audio_engine/engine/mt_audio_track.cpp`: the clock's first tick after play() is 1 or more,
+    and notes were collected from `prevTick + 1`, so the notes on tick 0 (the first downbeat) were
+    skipped until the sequence looped. The first tick now includes position 0. A tick counter
+    that goes backwards (clock restarted while a tick was in flight) restarts from 0 instead of
+    wrapping round `unsigned`.
+  - `audio_engine/engine/mt_audio_sequence.cpp`: `play()` did not reset `prevTicks`, so a second
+    play after a pause computed a huge negative difference and ran the bar counter away; it kept
+    the paused beat and tick, so after PLAY START the BAR:BEAT:TICK display and the metronome
+    counted from the old offset (the notes, counted by the tracks, were right). Bar, beat and
+    1/n signals fired one tick late (`>` instead of `>=`); the bar-1 and beat-1 signals were
+    never sent at the start (the clock never reports tick 0), so the metronome's first accent
+    was missing. All fixed; the clock is stopped before it is restarted.
+  - Threads (an intermittent SIGSEGV in `MTTrack::onTick`, 1 in 3 runs of `sim_modes.sh` at
+    "NEXT SEQ pad 2"): the sequencer's ticks run on `MTAudioTransportManager::processTick`'s
+    thread, but the MIDI clock's timer thread switched sequences itself (`play( next )` at the
+    loop end for NEXT SEQ, song steps), stopping the old sequence's tracks (clearing their
+    queued note-offs) while the tick thread was iterating them; the message thread's
+    PLAY / STOP did the same. Now the clock thread only queues those changes
+    (`MTAudioTransportManager::defer`) and the tick thread runs them between two ticks, dropping
+    the tick of the old clock run; `MTTrack::play / pause / stop` and the whole of `onTick` hold
+    the track's lock; a tick of the previous clock run arriving after `play()` is ignored by the
+    sequence and the tracks instead of playing a bar of notes at once.
+  - `audio_engine/engine/mt_audio_manager_transport.cpp`: PLAY START called the same `play( Seq )`
+    as PLAY, which resumes when paused, so after STOP it did not go to the top
+    (`startPlayback( Seq, Resume )` now). New: RECORD / OVERDUB arming and takes
+    (`setRecordMode`, `beginTake`, `endTake`, `recordLiveMidi`); STOP ends a take and disarms.
+  - `audio_engine/engine/mt_audio_track.{h,cpp}`: new live recording (`startRecording`,
+    `recordMidiMessage`, `stopRecording`, `recordTimingCorrect` hook for TC), and the
+    `KICK_SIM_LOG_NOTES` log (`SIM_BUILD` only). `mt_audio_interface.{h,cpp}`:
+    `setSequenceRecord`, `isSequenceRecordArmed / Overdub`, `isSequenceRecording`,
+    `setRecordTimingCorrect`; `addLiveMidiMsg` hands notes to the running take.
+  - `audio_engine/engine/mt_audio_metronome.h`: MODE (RECORD / PLAY / RECORD + PLAY) and LEVEL
+    from the METRONOME dialog are applied (they were stored and ignored).
+  - `kick_ui/dialogs/kick_AppHome.cpp`: handlers for TAP TEMPO, RECORD and OVERDUB (none existed
+    outside the LOOPER), RECORD / OVERDUB LEDs; `kick_leds/kick_leds.cpp`: RECORD / OVERDUB LEDs
+    off when the transport stops.
+  - Reconstruction (`AudIO/AudIO_juce/`): only `mt_AudioDeviceProbe.cpp` changed (the
+    `KICK_SIM_AUDIO_INPUT=device` keyword).
+  - Simulator only (`apps/kickem/`, `tools/`): the panel shows one of PLAY / STOP / PLAY START lit
+    (the app's "media control" LED message never switches the other off; the surface firmware
+    presumably does); `sim_ctl.sh repeat`, `clickat`, `status`; `click` also finds dialogs drawn
+    inside the panel window; `sim_launch.sh` defaults to a silent input; `wav_measure.py
+    --channels --freqs`; `sim_transport.sh`.
 
 - `AudIO/AudIO/Includes/Platform.h`: adds `<thread>` and `<chrono>`, which the DAW sources use
   but never included (other platforms got them transitively).

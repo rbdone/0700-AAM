@@ -7,7 +7,10 @@
 # The opt-in engine tooling is passed through from the environment:
 #
 #   KICK_SIM_AUDIO_PROBE=<file.wav>   write the master output to a WAV, log peak/RMS per second
-#   KICK_SIM_AUDIO_INPUT=tone|tone:<hz>|pulse|<file>   replace the audio input with a test source
+#   KICK_SIM_AUDIO_INPUT=silence|tone|tone:<hz>|pulse|<file>|device   replace the audio input
+#       with a test source. Unset, this script uses "silence": the app never opens a path from the
+#       microphone to the speakers by itself, but the SAMPLER / LOOPER MONITOR buttons do, and on a
+#       laptop that howls. Pass "device" for the real input (headphones).
 #
 # The in-app scripting channel used by sim_ctl.sh is always on: KICK_SIM_CONTROL defaults to
 # Kick/build/.sim_ctl (emptied here), and the log path is recorded in Kick/build/.sim_log.
@@ -58,6 +61,7 @@ while :; do
 done
 
 mkdir -p "$(dirname "$LOG")"
+export KICK_SIM_AUDIO_INPUT=${KICK_SIM_AUDIO_INPUT:-silence}
 cd "$BUILD"
 export KICK_SIM_CONTROL=${KICK_SIM_CONTROL:-$PWD/.sim_ctl}
 [ -p "$KICK_SIM_CONTROL" ] && rm -f "$KICK_SIM_CONTROL"   # never block on a stale FIFO

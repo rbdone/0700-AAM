@@ -151,6 +151,11 @@ namespace mt
         auto spec = juce::SystemStats::getEnvironmentVariable( "KICK_SIM_AUDIO_INPUT", {} ).trim();
         if( spec.isEmpty() )
             return nullptr;
+        if( spec == "device" ) // explicit: the real device input (sim_launch.sh defaults to silence)
+        {
+            juce::Logger::writeToLog( "TestInput: using the device input" );
+            return nullptr;
+        }
 
         std::unique_ptr<TestInput> in( new TestInput() );
         in->sampleRate = SampleRate;

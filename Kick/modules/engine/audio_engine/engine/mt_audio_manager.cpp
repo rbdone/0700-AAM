@@ -78,6 +78,7 @@ namespace mt
 
         // Metronome object...
         _metronome = std::make_unique<MTMetronome>( engine, getSettings().metronome.vTree );
+        _metronome->isRecording = [this]() { return isTakeRunning(); };
 
         // Initialize Audio device...
         juce::MessageManager::callAsync( [&]() {

@@ -794,6 +794,18 @@ namespace sim
                 buttonsById[DCC::EN_BANK_A + ( id - DCC::EN_BANK_A ) % 4]->setLed( true );
                 return;
             }
+            // Transport: the app lights PLAY or STOP with a "media control" message (third value 1,
+            // DclContractsHelper::setMediaControlMessage) and never switches the other one off; the
+            // surface shows one of PLAY / STOP / PLAY START at a time.
+            if( ( id == DCC::EN_PLAY || id == DCC::EN_STOP || id == DCC::EN_PLAYSTART ) && d.size() >= 3 && d[2] == 1 && d[1] != DCC::StateOff )
+            {
+                for( int t : { (int)DCC::EN_STOP, (int)DCC::EN_PLAY, (int)DCC::EN_PLAYSTART } )
+                {
+                    ledOn[t] = false;
+                    if( auto it = buttonsById.find( t ); it != buttonsById.end() )
+                        it->second->setLed( false );
+                }
+            }
             // Other SHIFT functions with an LED (HALF LEVEL, LATCH) have no key of their own: they
             // show on the key they are printed under, which is lit while either LED is on.
             ledOn[id] = d[1] != DCC::StateOff;

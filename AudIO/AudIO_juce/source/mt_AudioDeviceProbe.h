@@ -57,6 +57,7 @@ namespace mt
     /// KICK_SIM_AUDIO_INPUT to one of:
     ///
     ///     silence       digital silence (no microphone, no feedback through the speakers)
+    ///     device        the real device input, no replacement (sim_launch.sh uses silence when unset)
     ///     tone          1 kHz sine at -12 dBFS, continuous
     ///     tone:<hz>     sine at that frequency, -12 dBFS
     ///     pulse         1 kHz bursts of 50 ms every 500 ms (120 BPM quarter notes), -6 dBFS
