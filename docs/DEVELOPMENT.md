@@ -238,6 +238,9 @@ selected track's program (track 1 after loading). Bank keys move the pads by 16 
 program, so banks B-D of Starter Drums are what a pad reaches after pressing B, C or D; to play
 Starter Keys or Starter Loops from the pads, select their track.
 
+`Sequence 02` (2 bars, its own 100 BPM, an off-grid "Drums Live" track and the drum loop) was
+added in phase 5 for NEXT SEQ, MASTER and TC; see 4.8.
+
 **Project schema** (learned from `modules/engine/` and from what the app writes back on SAVE;
 the `IDs::` names are in `interface/source/mt_audio_ids.h`; properties left out take the engine
 defaults):
@@ -396,6 +399,84 @@ input; the preview and Pad 1 each play 2.000 s with silence before; Discard with
 leaves 72000 frames = 1.500 s, which is what Pad 1 plays after the project is reloaded; the
 looper's playback repeats with a period of 384000 samples = 8.000 s (4 bars at 120 BPM),
 successive periods sample-identical, and an overdub pass adds a second, offset pulse set.
+
+### 4.8 Mode keys (phase 5)
+
+The function keys and their SHIFT functions (MAIN / GRID, BROWSE / SAVE, TRACK MIX / PAD MIX,
+TRACK MUTE / PAD MUTE, NEXT SEQ / FX, TAP TEMPO's MASTER, MENU / PREFS, STEP SEQ / AUTO,
+TC / ON/OFF, SAMPLER / LOOP, SAMPLE EDIT / LINK EDIT, PROG EDIT / MIDI CTRL, LINK) are checked
+by `Kick/tools/sim_modes.sh [OUTDIR]` (default `Kick/build/logs/modes`). It resets the build
+copies of "Starter Kit" and "Demo 01" from `Kick/demos`, starts the simulator with
+`KICK_SIM_AUDIO_INPUT=silence`, the probe and surface logging, and drives everything through
+`sim_ctl.sh`, so it runs with the screen locked:
+
+1. Demo 01 (empty): P1-P4 in NEXT SEQ, TRACK MIX and PAD MIX, then TC, ON/OFF, MASTER, AUTO;
+   the app must survive (these used to crash).
+2. Starter Kit: every key in turn. For each: the packet (`Data[0] From DCL:<id>`), the LED packet
+   (`SimSurface: LED cmd=0 data=<id>,<on>`) or, for keys without an LED, the log line of their
+   handler, the app still alive, and a screenshot `<n>-<key>-screen.png`.
+3. Follow-ups that show the screens working: P1 / P2 in TRACK MIX and PAD MIX, P1 in NEXT SEQ
+   and FX, SAVE rewriting the project file, TRACK MUTE muting tracks while the sequence plays and
+   PAD MUTE muting the kick (probe peaks), NEXT SEQ queuing Sequence 02, MASTER on Sequence 02,
+   and TC on its off-grid drums (the saved notes must all be on the 1/16 grid).
+
+It prints a table (`results.txt` in OUTDIR) and exits 1 on any FAIL. A `gap` row is a known
+engine limitation, reported but not a failure. Last run (2026-10-27): 50 checks, 0 failed, one
+gap; screenshots and the table are in `docs/sim_audit/phase5_modes/`. Measured: TRACK MUTE with
+Keys and Loops muted -3 dBFS peak (drums alone), all three muted -120 dBFS, unmuted +2 dBFS;
+PAD MUTE pad 1 then Pad 1 on MAIN -120 dBFS, unmuted -9.2 dBFS; TC moved 23 of 23 notes of
+"Drums Live" onto the grid.
+
+**Starter content.** `make_starter_kit.py` (`sequence_two()`) adds **Sequence 02**: 2 bars at its
+own tempo of 100 BPM (`isMasterBPM="0"` with a `TEMPOS` child), a half-time "Drums Live" track
+whose every hit is up to 9 ticks off the 16th grid (seeded, so deterministic), and the drum loop
+on Loops. It gives NEXT SEQ a second sequence, MASTER a tempo to switch from, and TC something to
+correct. Sequence 01 is unchanged.
+
+**What the keys do now.**
+
+| Key | Behaviour |
+|---|---|
+| TC | Opens TIMING CORRECT (`kick_ui/modes/kick_TimingCorrect.*`, new): a Timing Correct switch, NOTE VALUE 1/4 ... 1/32T (the selected sequence's quantization, the value the step sequencer's TIME DIV and the grid use) and STRENGTH 0-100 %. Apply stores the note value and, with Timing Correct on, moves the selected track's notes that far towards the grid. |
+| ON/OFF (SHIFT + TC) | Switches Timing Correct on / off, lights the TC key while on (`LED 34`) and shows a notification. `TimingCorrect::correct( tick )` snaps a start to the note value while on, for live recording (phase 3) to call. |
+| MASTER (SHIFT + TAP TEMPO) | Switches the selected sequence between its own tempo and the master tempo (the sequence's Global toggle, `setSequenceBPMToMaster`), shows "Master Tempo: 120 BPM" / "Sequence Tempo: 100 BPM", sends `LED 19` on / off (the panel has no LED under a caption). |
+| AUTO (SHIFT + STEP SEQ) | Nothing to do: the release has no automation engine (the mode header's Automation button has an empty `onClick`, and nothing records or plays parameter changes). In the simulator it shows "Automation is not available in this firmware" and logs `SimUnavailable: Automation`. |
+| LOOP | Leaving the looper now switches its LED off. |
+| Others | Unchanged code; verified on the Starter Kit (`docs/SIMULATOR_STATUS.md`). |
+
+What was inferred: the captions follow the MPC-style layout this panel copies, where TC opens the
+Timing Correct settings, SHIFT + TC turns Timing Correct on or off, SHIFT + TAP TEMPO (MASTER)
+makes the sequence follow the master tempo instead of its own, and AUTO arms automation. The code
+supplied the pieces: the per-sequence quantization (`MTTempoSettings::quantize`), the per-sequence
+master-tempo flag (`isMasterBPM`, shown as "Global" on the Main screen), the `EN_TC` / `EN_MASTER`
+LED ids, and no automation code at all.
+
+**Shared-code changes (the device runs them too).**
+
+- Crash guards: `KickNextSequenceMode::knobCommand` returns for P1-P4 without a sequence;
+  `ChannelMixer::knobCommand` null-checks its view casts and casts the Output (4) and Midi (5)
+  tabs to the right class (they were swapped); the seven `kick_ui_channel_mixer` views,
+  `PadMixerContent::knobCommand` and `ListEditMode::knobCommand` return when the table has no rows.
+- `PadMixerContent::knobCommand` used `row - 1`, so P1-P4 addressed row -1 (nothing) and P5-P8 the
+  first pad; it now uses the row as the track mixers do. Inferred from the identical maths in the
+  other mixers and from the rows `getRowNumbers` returns; not checked on a unit.
+- NEXT SEQ refreshes its list after P1-P4, which showed the old BPM / length before.
+- TC, ON/OFF and MASTER handlers in `KickHome::handleCommand` and the new `TimingCorrect`.
+- `kick_leds.cpp`: the looper's close case lacked `id =`, so its LED stayed on.
+
+**Simulator-only changes.** `KickTableView::getRowNumbers` (`SIM_BUILD`): the Q-Link row maths
+uses the canvas's desktop position, which on the unit is its position on the 1024x600 screen; in
+the simulator the screen is scaled and offset inside the panel, so P1-P4 in TRACK MIX / PAD MIX /
+LIST EDIT hit no row. It now measures from the transformed screen root. `kick_SimControl.cpp`:
+`press NAME` skips printed labels that take no clicks, so `press MASTER` reaches the SHIFT + TAP
+TEMPO caption instead of the label under the MASTER pot.
+
+**Not like the device yet.** TRACK MIX's program LEVEL and PAD MIX's pad LEVEL change on screen
+but not in the sound: nothing in the engine reads a program's `level`, and `DrumVoice` ignores a
+pad's `gain` (as it ignores the pad's semi / fine, 4.4); gain staging belongs to phase 3, and the
+`gap` row in `sim_modes.sh` turns into `ok` once Pad 1 gets quieter. FX (XY Effects) only updates
+its labels; nothing connects it to audio in this release. LINK reaches
+`KnobEdit::knobLongPress()` with no visible change on Main (Q-Link pages, phase 5b).
 
 ## 5. What had to change to make the public release build
 

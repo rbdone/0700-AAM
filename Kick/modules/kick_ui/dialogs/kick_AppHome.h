@@ -50,6 +50,7 @@ namespace kick_ui
         void                 load( Screen screen );
         void                 handleCommand( CPktMgr::HWMsg_t& );
         void                 knobCommand( int knob, int value );
+        void                 toggleMasterTempo();
         void                 resized() override;
         void                 handleAsyncUpdate() override;
         inline void          setupLoadScreenVisibility();

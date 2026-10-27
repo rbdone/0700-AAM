@@ -1,0 +1,50 @@
+empty: load  ok    Demo 01 loaded
+empty: NEXT SEQ ok    P1-P4 turned, no crash
+empty: TRACK MIX ok    P1-P4 turned, no crash
+empty: PAD MIX ok    P1-P4 turned, no crash
+empty: TC..AUTO ok    TC, ON/OFF, MASTER, AUTO, no crash
+PUSH         ok    Starter Kit loaded (MAIN lit)
+MAIN         ok    id 8, LED 8,1 (07-MAIN-screen.png)
+GRID         ok    id 9, LED 9,1 (08-GRID-screen.png)
+BROWSE       ok    id 10, LED 10,1 (09-BROWSE-screen.png)
+TRACK MIX    ok    id 12, LED 12,1 (10-TRACK_MIX-screen.png)
+TRACK MIX P1+1 ok    P1 1, no crash (11-TRACK_MIX_P1_1-screen.png)
+TRACK MIX P2-50 ok    P2 -50, no crash (12-TRACK_MIX_P2-50-screen.png)
+PAD MIX      ok    id 13, LED 13,1 (13-PAD_MIX-screen.png)
+PAD MIX P1-50 ok    P1 -50, no crash (14-PAD_MIX_P1-50-screen.png)
+MIX levels   gap   not audible: Pad 1 peak -9.2 dBFS; TRACK MIX level -50: -9.2; PAD MIX level -50: -9.2; restored -9.2
+TRACK MUTE   ok    id 14, LED 14,1 (16-TRACK_MUTE-screen.png)
+PAD MUTE     ok    id 15, LED 15,1 (17-PAD_MUTE-screen.png)
+NEXT SEQ     ok    id 16, LED 16,1 (18-NEXT_SEQ-screen.png)
+NEXT SEQ P1+2 ok    P1 2, no crash (19-NEXT_SEQ_P1_2-screen.png)
+FX           ok    id 17, LED 17,1 (20-FX-screen.png)
+FX P1+1      ok    P1 1, no crash (21-FX_P1_1-screen.png)
+MENU         ok    id 22, LED 22,1 (22-MENU-screen.png)
+PREFS        ok    id 23, LED 23,1 (23-PREFS-screen.png)
+STEP SEQ     ok    id 32, LED 32,1 (24-STEP_SEQ-screen.png)
+AUTO         ok    id 33, LED -, 'SimUnavailable: Automation' (25-AUTO-screen.png)
+TC           ok    id 34, LED -, 'TimingCorrect: window shown' (26-TC-screen.png)
+ON/OFF       ok    id 35, LED 34,1, 'TimingCorrect: Timing Correct ON' (27-ON_OFF-screen.png)
+ON/OFF       ok    id 35, LED 34,0, 'TimingCorrect: Timing Correct OFF' (28-ON_OFF-screen.png)
+SAMPLER      ok    id 36, LED 36,1 (29-SAMPLER-screen.png)
+LOOP         ok    id 37, LED 37,1 (30-LOOP-screen.png)
+SAMPLE EDIT  ok    id 38, LED 37,0 (31-SAMPLE_EDIT-screen.png)
+LINK EDIT    ok    id 39, LED -, 'In screen 39' (32-LINK_EDIT-screen.png)
+PROG EDIT    ok    id 40, LED 40,1 (33-PROG_EDIT-screen.png)
+MIDI CTRL    ok    id 41, LED 41,1 (34-MIDI_CTRL-screen.png)
+MAIN         ok    id 8, LED 8,1 (35-MAIN-screen.png)
+MASTER       ok    id 19, LED 19,0, 'Tempo source: Sequence 01 Sequence Tempo' (36-MASTER-screen.png)
+MASTER       ok    id 19, LED 19,1, 'Tempo source: Sequence 01 Master Tempo' (37-MASTER-screen.png)
+LINK         ok    id 47, LED -, 'In screen 47' (38-LINK-screen.png)
+SAVE         ok    id 11, LED - (39-SAVE-screen.png)
+SAVE file    ok    Starter Kit.kickPrj rewritten
+TRACK MUTE pads ok    peak drums only -3.1 dBFS, all muted -120 dBFS, unmuted 2 dBFS
+PAD MUTE pad 1 ok    Pad 1 peak muted -120 dBFS, unmuted -9.2 dBFS
+NEXT SEQ pad 2 ok    queued and played (screenshots)
+MASTER       ok    id 19, LED 19,1, 'Tempo source: Sequence 02 Master Tempo: 120 BPM' (44-MASTER-screen.png)
+MASTER       ok    id 19, LED 19,0, 'Tempo source: Sequence 02 Sequence Tempo: 100 BPM' (45-MASTER-screen.png)
+ON/OFF       ok    id 35, LED 34,1, 'TimingCorrect: Timing Correct ON' (46-ON_OFF-screen.png)
+TC           ok    id 34, LED -, 'TimingCorrect: window shown' (47-TC-screen.png)
+TC Apply     ok    note value 1/16 (24 ticks), strength 100%: moved 23 of 23 notes
+TC result    ok    saved Drums Live: 23 notes, all on the 1/16 grid
+ON/OFF       ok    id 35, LED 34,0, 'TimingCorrect: Timing Correct OFF' (50-ON_OFF-screen.png)

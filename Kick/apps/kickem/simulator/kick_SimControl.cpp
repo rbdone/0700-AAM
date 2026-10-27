@@ -203,8 +203,12 @@ namespace sim
 
     juce::Component* SimControl::findPanelControl( const juce::String& Name )
     {
+        // Printed labels that are not controls (e.g. "MASTER" under the MASTER pot, a twin of the
+        // SHIFT + TAP TEMPO caption) do not take clicks: skip them so the control is found.
         return findIn( *panel.getTopLevelComponent(), [&]( juce::Component& C ) {
-            return dynamic_cast<juce::Button*>( &C ) != nullptr && C.getName() == Name && !isInside( &C, &screen );
+            bool self = false, children = false;
+            C.getInterceptsMouseClicks( self, children );
+            return dynamic_cast<juce::Button*>( &C ) != nullptr && self && C.getName() == Name && !isInside( &C, &screen );
         } );
     }
 
