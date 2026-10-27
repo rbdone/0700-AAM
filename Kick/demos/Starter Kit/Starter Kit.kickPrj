@@ -1331,5 +1331,42 @@
         </NOTELIST>
       </TRACK>
     </SEQUENCE>
+    <SEQUENCE id="skSeq002" name="Sequence 02" length="2" loop="1" loopStart="0" loopEnd="2" isMasterBPM="0">
+      <TEMPOS>
+        <TEMPO bpm="100.0" num="4" den="4"/>
+      </TEMPOS>
+      <TRACK id="skTrk101" name="Drums Live" program="skPrg001" usingSequenceLength="1" length="2" level="100">
+        <NOTELIST>
+          <NOTE id="1" no="2" velocity="108" start="2" length="24"/>
+          <NOTE id="2" no="0" velocity="118" start="7" length="24"/>
+          <NOTE id="3" no="2" velocity="100" start="44" length="24"/>
+          <NOTE id="4" no="2" velocity="108" start="98" length="24"/>
+          <NOTE id="5" no="2" velocity="100" start="140" length="24"/>
+          <NOTE id="6" no="2" velocity="108" start="184" length="24"/>
+          <NOTE id="7" no="1" velocity="112" start="196" length="24"/>
+          <NOTE id="8" no="0" velocity="118" start="243" length="24"/>
+          <NOTE id="9" no="2" velocity="100" start="247" length="24"/>
+          <NOTE id="10" no="2" velocity="108" start="281" length="24"/>
+          <NOTE id="11" no="2" velocity="100" start="334" length="24"/>
+          <NOTE id="12" no="2" velocity="108" start="381" length="24"/>
+          <NOTE id="13" no="0" velocity="118" start="385" length="24"/>
+          <NOTE id="14" no="2" velocity="100" start="426" length="24"/>
+          <NOTE id="15" no="2" velocity="108" start="481" length="24"/>
+          <NOTE id="16" no="2" velocity="100" start="536" length="24"/>
+          <NOTE id="17" no="1" velocity="112" start="574" length="24"/>
+          <NOTE id="18" no="2" velocity="108" start="574" length="24"/>
+          <NOTE id="19" no="2" velocity="100" start="617" length="24"/>
+          <NOTE id="20" no="0" velocity="118" start="633" length="24"/>
+          <NOTE id="21" no="2" velocity="108" start="664" length="24"/>
+          <NOTE id="22" no="2" velocity="100" start="713" length="24"/>
+          <NOTE id="23" no="3" velocity="96" start="713" length="24"/>
+        </NOTELIST>
+      </TRACK>
+      <TRACK id="skTrk102" name="Loops" program="skPrg003" usingSequenceLength="1" length="2" level="80">
+        <NOTELIST>
+          <NOTE id="1" no="0" velocity="100" start="0" length="384"/>
+        </NOTELIST>
+      </TRACK>
+    </SEQUENCE>
   </SEQUENCES>
 </ROOT>
