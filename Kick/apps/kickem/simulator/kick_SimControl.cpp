@@ -210,7 +210,9 @@ namespace sim
 
     juce::Component* SimControl::findScreenComponent( const juce::String& Name )
     {
-        auto match = [&]( juce::Component& C ) { return nameOf( C ) == Name; };
+        // Zero-size components are skipped: some dialog contents carry unused 0x0 "Apply" /
+        // "Cancel" buttons of the same name as the dialog's real ones (AppSelectProgramMode).
+        auto match = [&]( juce::Component& C ) { return nameOf( C ) == Name && !C.getLocalBounds().isEmpty(); };
         // Popups sit above the screen, so look there first.
         auto wins = windows( panel );
         for( int i = wins.size(); --i >= 1; )
