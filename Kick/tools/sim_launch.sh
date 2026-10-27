@@ -33,10 +33,13 @@ alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
 waited=0
 while :; do
     if mkdir "$LOCK" 2>/dev/null; then
+        # Own it at once (this shell, replaced by the app's pid below), so a waiting
+        # launcher never mistakes the fresh lock for a stale one.
+        echo "$$" > "$LOCK/pid"
         if [ -z "$(pgrep -x KT_KickEM)" ]; then
             break
         fi
-        rmdir "$LOCK"   # someone launched without the lock; wait for it
+        rm -rf "$LOCK"   # someone launched without the lock; wait for it
     else
         owner=$(cat "$LOCK/pid" 2>/dev/null || true)
         if [ -n "$owner" ] && ! alive "$owner"; then
