@@ -23,7 +23,7 @@ Build targets in `Kick/apps/`:
 
 | Target | What it is | Desktop? |
 |---|---|---|
-| `Kick` | The monolithic app, the one the device runs | Yes. Hardware input comes from the keyboard map (section 4) |
+| `Kick` | The monolithic app, the one the device runs | Yes. Hardware input comes from the keyboard map (section 4.3) |
 | `KT_KickEM` | **The simulator**: `Kick` plus an on-screen control surface around the real screen | Yes, `-DKICK_SIMULATOR=ON` |
 | `KickMain`, `KickUserInterface`, `KickAudioEngine`, `KickAudioModel`, `KickDeviceControl` | A split multi-process variant using the `ipc` module | Not needed for development |
 | `kickvst` | VST plugin wrapper | No: depends on `tracktion_engine`, which nothing fetches |
@@ -136,7 +136,34 @@ canvas units measured from a top-down photo of the unit), the drawing, and the p
 encoding/decoding; `kick_SimulatorInterfaceImpl.cpp` is the bridge that `modules/input_events`
 talks to when compiled with `SIM_BUILD`.
 
-### 4.2 Keyboard control in both apps
+### 4.2 Scripting, screenshots and audio measurement
+
+Everything a check needs is in `Kick/tools/` and works from any directory:
+
+| Script | What it does |
+|---|---|
+| `sim_launch.sh [LOG]` | Starts `KT_KickEM` from `Kick/build`, logs to `LOG` (default `Kick/build/logs/sim.log`), waits for the control-surface handshake (`Send Comm Live`) and prints the pid. |
+| `sim_press.sh NAME...` | Presses controls by printed name (see 4.1). |
+| `sim_shot.sh [--all] OUT.png` | Captures the panel window by window id (`screencapture -l`), so it works while other windows cover it. `--all` also captures the app's popup windows as `OUT-<n>.png`. |
+| `sim_quit.sh` | Stops the simulator and releases the lock. |
+
+Only one `KT_KickEM` can run on a machine (the app refuses a second instance, and the press
+helper and audio device assume one). `sim_launch.sh` therefore holds a machine-wide lock
+(`/tmp/kt_kickem.lock`, override with `KICK_SIM_LOCK`) and waits for another session's
+simulator to quit; always pair it with `sim_quit.sh`.
+
+Opt-in environment variables, all off by default:
+
+| Variable | Effect |
+|---|---|
+| `KICK_SIM_AUDIO_PROBE=<file.wav>` | `mt::AudioDevice` writes the engine's master output to that WAV (32-bit float) and logs `AudioProbe: t=<n>s peak=<x>dBFS rms=<y>dBFS` once per second of audio. Silence logs `-120.0dBFS`. |
+| `KICK_SIM_AUDIO_INPUT=tone`, `tone:<hz>`, `pulse` or `<file>` | `mt::AudioDevice` replaces the device input with a test source: a -12 dBFS sine (1 kHz by default), 50 ms 1 kHz bursts every 500 ms at -6 dBFS, or a looped audio file. Logged as `TestInput: ...`. |
+| `KICK_SIM_LOG_SURFACE=1` | The simulated surface logs every packet the app sends it: `SimSurface: LED cmd=0 data=44,1` (type, command, payload). LED commands are `DeviceControlContracts::LedCmd` (0 = set single LED: id, state), pad commands `PadCmd`. |
+
+Input from the panel is always logged by the app as `Data[0] From DCL:<id> cmd From DCL : <cmd>
+type From DCL : <type>`, followed by the screens the packet reached.
+
+### 4.3 Keyboard control in both apps
 
 `Kick/modules/contracts/utils/keyboard/keyboard_detector.cpp` maps keys to control-surface
 packets. It used to be compiled on Windows only; it is now enabled on macOS too. The main

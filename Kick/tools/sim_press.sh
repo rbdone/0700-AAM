@@ -12,12 +12,14 @@
 # "ON/OFF", LOOP, "LINK EDIT", "MIDI CTRL", "HALF LVL", NOTES, E..H) is that key's SHIFT function:
 # the script holds SHIFT, presses the key, and releases SHIFT, exactly as on the unit.
 #
-# The simulator (KT_KickEM) must already be running, and the terminal must be allowed in
+# The simulator (KT_KickEM) must already be running (sim_launch.sh records its pid; KICK_SIM_PID
+# overrides), and the terminal must be allowed in
 # System Settings > Privacy & Security > Accessibility.
 set -e
 
-PID=$(pgrep -x KT_KickEM | head -1)
-[ -n "$PID" ] || { echo "KT_KickEM is not running" >&2; exit 1; }
+TOOLS=$(cd "$(dirname "$0")" && pwd)
+PID=${KICK_SIM_PID:-$(cat "$TOOLS/../build/.sim_pid" 2>/dev/null || pgrep -x KT_KickEM | head -1)}
+[ -n "$PID" ] && kill -0 "$PID" 2>/dev/null || { echo "KT_KickEM is not running" >&2; exit 1; }
 
 # Transport keys carry icons, not text, so their accessibility names are their ids.
 transport_name() {

@@ -682,6 +682,18 @@ namespace sim
     //==============================================================================================
     void Simulator::handleFromApp( CPktMgr::HWMsg_t& msg )
     {
+        // Opt-in trace of everything the app sends to the surface, for scripts (sim_smoke.sh):
+        //   SimSurface: LED cmd=0 data=44,1      (type name, pktCmd, payload)
+        static const bool trace = juce::SystemStats::getEnvironmentVariable( "KICK_SIM_LOG_SURFACE", {} ).isNotEmpty();
+        if( trace )
+        {
+            static const char* types[] = { "SYSTEM", "BUTTON", "LED", "PAD", "KNOBS", "MIDI", "CV", "SLIDER" };
+            juce::StringArray  bytes;
+            for( auto v : msg.data ) bytes.add( juce::String( (int)v ) );
+            const auto t = (int)msg.pktType;
+            juce::Logger::writeToLog( "SimSurface: " + juce::String( t >= 0 && t < 8 ? types[t] : "TYPE" + juce::String( t ) ) + " cmd=" + juce::String( (int)msg.pktCmd ) + " data=" + bytes.joinIntoString( "," ) );
+        }
+
         switch( msg.pktType )
         {
             case CPktMgr::EN_PKT_TYPE_PAD: handlePadMessage( msg ); break;
