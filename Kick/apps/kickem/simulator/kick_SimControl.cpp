@@ -151,6 +151,50 @@ namespace sim
             return;
         }
 
+        if( cmd == "down" || cmd == "up" || cmd == "hold" )
+        {
+            // down NAME [VELOCITY] / up NAME: press or release a pad or key and leave it so, e.g.
+            // ERASE or NOTE REPEAT held while pads are hit. hold NAME SECONDS [VELOCITY]: down,
+            // wait, up; answers after the release. NAME may contain spaces ("Pad 1"): numbers at
+            // the end are the arguments.
+            const int numArgs = cmd == "down" ? 1 : ( cmd == "hold" ? 2 : 0 );
+            juce::StringArray nameTok( tok );
+            juce::StringArray args;
+            while( args.size() < numArgs && nameTok.size() > 1 && nameTok[nameTok.size() - 1].containsOnly( "0123456789." ) )
+            {
+                args.insert( 0, nameTok[nameTok.size() - 1] );
+                nameTok.remove( nameTok.size() - 1 );
+            }
+            const auto name    = nameTok.joinIntoString( " " );
+            auto*      control = findPanelControl( name );
+            auto*      pad     = dynamic_cast<PadButton*>( control );
+            auto*      key     = dynamic_cast<SurfaceButton*>( control );
+            if( pad == nullptr && key == nullptr )
+                return fail( "no pad or key named: " + name );
+            if( cmd == "hold" && args.isEmpty() )
+                return fail( "usage: hold NAME SECONDS [VELOCITY]" );
+
+            const int velocity = cmd == "hold" ? ( args.size() > 1 ? args[1].getIntValue() : -1 ) : ( args.size() > 0 ? args[0].getIntValue() : -1 );
+            auto      set      = [pad, key, velocity]( bool Down ) {
+                if( pad != nullptr ) pad->scriptedHold( Down, velocity );
+                else key->scriptedHold( Down );
+            };
+            if( cmd != "hold" )
+            {
+                set( cmd == "down" );
+                return ok();
+            }
+            set( true );
+            busy = true;
+            juce::Component::SafePointer<juce::Component> safe( control );
+            juce::Timer::callAfterDelay( juce::jmax( 1, (int)( args[0].getDoubleValue() * 1000.0 ) ), [this, safe, set, ok]() {
+                if( safe != nullptr ) set( false );
+                busy = false;
+                ok();
+            } );
+            return;
+        }
+
         if( cmd == "shot" )
         {
             auto r = snapshot( juce::File::getCurrentWorkingDirectory().getChildFile( tok.joinIntoString( " " ) ) );
@@ -263,6 +307,22 @@ namespace sim
         }
 
         // Anything else: mouseDown now, mouseUp 80 ms later, at the touched point.
+        // First what JUCE does on a click: keyboard focus goes to the touched component or the
+        // nearest parent that wants it. That is how a touched control receives the jog wheel,
+        // + / -, PUSH and the slider. JUCE refuses focus while the window is not the key window
+        // (screen locked), so the control is also recorded as the simulator's focus target
+        // (ui::simFocusTarget, kick_ControlBase.h).
+        {
+            juce::Component* f = c;
+            while( f != nullptr && !f->getWantsKeyboardFocus() )
+                f = f->getParentComponent();
+            if( f != nullptr )
+            {
+                f->grabKeyboardFocus();
+                ui::simFocusTarget() = f;
+                log( "focus " + nameOf( *f ) + " (" + typeid( *f ).name() + ")" );
+            }
+        }
         const auto pos  = touchedPos;
         const auto now  = juce::Time::getCurrentTime();
         auto       make = [c, pos, now]( juce::ModifierKeys Mods ) {

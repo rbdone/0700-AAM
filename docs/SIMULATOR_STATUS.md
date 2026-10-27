@@ -124,7 +124,7 @@ only controls that do something at boot.
 |---|---|---|---|---|---|---|
 | Pads 1-16 on MAIN | PAD `EN_PAD1`..`EN_PAD16` (0-15) | `KickHomeListView` / `kick_AppMainMode.cpp` → `ae.addLiveMidiMsg` note on/off on the selected track | Plays the pad's sound and lights it in the program's pad colour. | Press and release each logged `In Recent Prj register handle command`. No pad LED, no audio (probe silent), screen unchanged. Not observed: `addLiveMidiMsg` returns early without a selected track. | missing | content |
 | Pad in BROWSE | PAD 0 | `fileBrowser::handleCommand` | Auditions the selected file on the pad and highlights the pad. | Pad highlight sent: `PAD cmd=1 data=0,1,3`. Nothing to audition. | partial | content |
-| Pads in NOTES (Pad Perform) | PAD 0 | `PadPerform::handleCommand` | Plays a scale or chord note per pad. | Entering NOTES sent per-pad colours (`PAD cmd=1 data=n,1,colour` for all 16, root notes highlighted). A pad press gave no sound. | partial | content |
+| Pads in NOTES (Pad Perform) | PAD 0 | `PadPerform::handleCommand` | Plays a scale or chord note per pad (Chromatic by default). | Phase 5: on the Starter Kit's Keys track, pads 1 / 2 / 13 play 130.8 / 138.8 / 261.7 Hz (C3, C#3, C4: chromatic, pad 13 an octave up), measured by `sim_pads.sh`. FULL / HALF LEVEL and NOTE REPEAT apply here too. | works | none |
 | Pads in TRACK MUTE / PAD MUTE | PAD 0 | `KickPadButtonGroupComponent` (`kick_padButtonGroup.cpp`) → `triggerClick` | Toggles mute (or solo with SHIFT) of the track or pad. | Packet logged. No change; the screens say "PAD MUTE IS NOT AVAILABLE FOR SELECTED TRA..." and the track grid is empty. | missing | content |
 | Pads in STEP SEQ | PAD 0 | `StepSeq::handleCommand` | Toggles the step. | Packet logged. Screen: "Create any Track Before using StepSequencer". | missing | content |
 | Pads in SAMPLER | PAD 0 | `Sampler::handleCommand` | Starts recording or marks a slice. | Packet logged. No visible change. Input is silent unless `KICK_SIM_AUDIO_INPUT` is set (phase 4). | missing | content / engine |
@@ -135,8 +135,8 @@ only controls that do something at boot.
 
 | Control | Packet id | Handler(s) | Device behaviour | Observed in simulator | Status | Gap class |
 |---|---|---|---|---|---|---|
-| A, B, C, D | `EN_BANK_A`..`EN_BANK_D` (0-3) | Global switch → `ae.setBank`; `kick_leds.cpp` `setBankMessage` + `refreshPadLeds`; StepSeq / Pad Mute / Track Mute page their own grids | Switches pad bank (pad note offset); bank LED; pads recolour for the program on the new bank. | `In screen N ... register handle command`, then `LED cmd=0 data=N,1`; the bank key lights. In TRACK MUTE, bank B also re-sent the pad colour state (`PAD cmd=6`). No program colours: nothing is assigned. | partial | content |
-| E, F, G, H (SHIFT + A-D) | `EN_BANK_E`..`EN_BANK_H` (4-7) | Same | Banks E-H. | SHIFT 31, then id 4-7 `In screen 4..7`, then `LED cmd=0 data=4..7,1`. After the sim fix, the A-D key under the caption lights. | partial | content |
+| A, B, C, D | `EN_BANK_A`..`EN_BANK_D` (0-3) | Global switch → `ae.setBank`; `kick_leds.cpp` `setBankMessage` + `refreshPadLeds`; StepSeq / Pad Mute / Track Mute page their own grids | Switches pad bank (pad note offset); bank LED; pads recolour for the program on the new bank. | Phase 5, Starter Kit (Drums track): `LED cmd=0 data=N,1` and one `PAD cmd=6` per bank: A the kit colours `12,13,14,9,16,...`, B all 6 (keys), C green, D pink / orange; pads play the bank's notes (phase 2). | works | none |
+| E, F, G, H (SHIFT + A-D) | `EN_BANK_E`..`EN_BANK_H` (4-7) | Same | Banks E-H (notes 64-127). | Phase 5: `LED cmd=0 data=4..7,1` (the A-D key under the caption lights), `PAD cmd=6 data=0,...,0,3,...,3`: every pad "no sample", because Starter Drums has nothing above note 63. The pads follow; there is just nothing to play there. | works | content (nothing on E-H) |
 | Bank LEDs (sim fix) | n/a | `Simulator::handleLedMessage` | One bank lit at a time. | Before the fix, LEDs piled up (A, then A+B, then A+B+C...), because the app only ever sends "bank N on". Fixed in the panel; verified: C, then E lights A, H lights D, then A. | works (fixed) | sim |
 
 ## Loaded state: function keys (row 1 and row 2)
@@ -168,15 +168,15 @@ turned on.
 | PAD MUTE (SHIFT+TRACK MUTE) | `EN_PAD_MUTE` (15) | Global → `MenuPadMute` | Pad mute grid. | Phase 5 (`sim_modes.sh`, Starter Kit): Pads A01-A16 named after the kit; `LED 15,1,0`. Pad 1 mutes the kick: Pad 1 on MAIN peaks -120 dBFS muted, -9.2 dBFS unmuted (probe). | works | none |
 | FX (SHIFT+NEXT SEQ) | `EN_FX` (17) | Global → `HomeXYView` | XY effects; Q-Links: preset, attack, release, wet/dry. | Phase 5 (`sim_modes.sh`, Starter Kit): XY Effects; `LED 17,1,0`; P1-P4 edit the Setup panel's preset / attack / release / wet-dry. No sound change: `XyFxView` only updates its labels, nothing connects it to the engine in this release (no XY effect code). | partial | code (XY FX not connected to audio) |
 | MASTER (SHIFT+TAP TEMPO) | `EN_MASTER` (19) | Global → `KickHome::toggleMasterTempo` (new) | Switches the selected sequence between its own tempo and the master tempo. | Phase 5 (`sim_modes.sh`, Starter Kit): Sequence 02 (own tempo 100 BPM): `Tempo source: Sequence 02 Master Tempo: 120 BPM`, again: `Sequence Tempo: 100 BPM`; the Main screen's Global toggle follows; notification bubble; `LED 19,1` / `19,0` (the panel has no LED under the caption). | works | none (new code) |
-| LATCH (SHIFT+NOTE REPEAT) | `EN_LATCH` (25) | none | Latches note repeat. | `In screen 25`, nothing. | missing | code |
+| LATCH (SHIFT+NOTE REPEAT) | `EN_LATCH` (25) | `PadModifiers` (`kick_ui/dialogs/kick_PadModifiers.cpp`, new) | Latches note repeat on, so held pads repeat without holding NOTE REPEAT; again (or NOTE REPEAT) unlatches. | Phase 5: `LED 24,1` + `LED 25,1` (the panel lights NOTE REPEAT for both); a 1 s held clave retriggers 8-9 times, median 125-130 ms (1/16 at 120 BPM); unlatched, the same hold gives 1 onset. | works | none |
 | PREFS (SHIFT+MENU) | `EN_PREF` (23) | Global (second switch) → `HomePreferencesView` | Preferences (Info, Project Defaults, Hardware, MIDI, CV, Ethernet, WiFi). | Phase 5 (`sim_modes.sh`, Starter Kit): Preferences / Info; `LED 23,1,0`. WiFi / Ethernet / CV show "Not available in the simulator" (4.5). | works | hardware (handled by phase 6) |
 | AUTO (SHIFT+STEP SEQ) | `EN_AUTOMATION` (33) | Global → notice (`SIM_BUILD`) | Automation read / write. | Phase 5 (`sim_modes.sh`, Starter Kit): Notification "Automation is not available in this firmware", `SimUnavailable: Automation`. There is no automation engine in the release (the mode header's Automation button has an empty `onClick`; nothing records or plays parameter changes), so there is nothing to switch. | missing | code (no automation engine) |
 | ON/OFF (SHIFT+TC) | `EN_ON_OFF` (35) | Global → `TimingCorrect::setEnabled` (new) | Timing Correct on / off. | Phase 5 (`sim_modes.sh`, Starter Kit): Toggles Timing Correct: `LED 34,1` (TC lit) / `LED 34,0`, notification "Timing Correct ON 1/16". With it on, TC's Apply moves notes and `TimingCorrect::correct()` snaps a recorded start (for phase 3 recording). | works | none (new code) |
 | LOOP (SHIFT+SAMPLER) | `EN_LOOPER` (37) | Global → `MenuLooper` | Looper. | Phase 5 (`sim_modes.sh`, Starter Kit): Looper screen; `LED 37,1,0`, and leaving it now sends `LED 37,0,0` (fixed in `kick_leds.cpp`). Recording: phase 4 (4.6). | works | none |
 | LINK EDIT (SHIFT+SAMPLE EDIT) | `EN_LINK_EDIT` (39) | Global → `MenuKnobEdit` | Q-Link assignment editor. | Phase 5 (`sim_modes.sh`, Starter Kit): Q-Link Edit opens (`In screen 39`); no LED (none defined). Assignments: phase 5b. | works | none |
 | MIDI CTRL (SHIFT+PROG EDIT) | `EN_MIDI_CONTROL` (41) | Global → `MenuMidiControl` | MIDI control mapping; global keys disabled while open. | Phase 5 (`sim_modes.sh`, Starter Kit): MIDI Control; `LED 41,1,0`; MAIN leaves it. | works | none |
-| HALF LVL (SHIFT+FULL LEVEL) | `EN_HALF_LEVEL` (49) | Global → `setHalfLevel(true)` + `LED 49,1,0` | Pads play at half velocity (only StepSeq reads it). | `LED 49,1,0` sent. The panel has no LED 49 (HALF LVL is a caption), and the app never switches 48 off, so nothing changes on the panel. | partial | sim / code |
-| NOTES (SHIFT+16 LEVELS) | `EN_NOTES` (51) | Global → `MenuPadPerform` | Pad Perform: scales, chords, progressions on the pads. | Pad Notes (Major, root C, octave -2); per-pad colours sent; no LED. | partial | content |
+| HALF LVL (SHIFT+FULL LEVEL) | `EN_HALF_LEVEL` (49) | `PadModifiers` (replaces the global case) | Toggle: every pad hit plays at velocity 64; switches FULL LEVEL off. | Phase 5: `LED 48,0` then `LED 49,1`; a velocity-30 kick hit peaks at -13.7 dBFS, the same as a velocity-64 hit (-13.7) and 7 dB under velocity 127. The panel shows LED 49 on the FULL LEVEL key it is printed under. | works | none |
+| NOTES (SHIFT+16 LEVELS) | `EN_NOTES` (51) | Global → `MenuPadPerform` | Pad Perform: chromatic (default), scales, chords, progressions on the pads. | Pad Notes (Chromatic, root C, octave -2); per-pad colours sent. Pads play chromatic notes on the selected track (see Pads in NOTES). No LED (none defined). | works | none |
 
 ## Loaded state: transport
 
@@ -193,18 +193,18 @@ turned on.
 | Control | Packet id | Handler(s) | Device behaviour | Observed in simulator | Status | Gap class |
 |---|---|---|---|---|---|---|
 | TAP TEMPO | `EN_TAP_TEMPO` (18) | none | Taps the tempo. | Three taps: `In screen 18` each; nothing. | missing | code |
-| NOTE REPEAT | `EN_NOTE_REPEAT` (24) | none | Repeats held pads at the grid rate. | `In screen 24`, nothing. | missing | code |
+| NOTE REPEAT | `EN_NOTE_REPEAT` (24) | `PadModifiers` (new); the panel now also sends its release | While held, held pads retrigger at the sequence's time-correct division (TC, 1/16 by default) at the sequence tempo, on the grid while the sequencer plays. | Phase 5: `LED 24,1` while held, `24,0` on release; holding the clave 1 s gives 9-10 onsets, median 120-130 ms (expected 125 ms; the engine applies live notes per 10 ms block). Works on MAIN, GRID, TRACK MIX, PROG EDIT, NOTES. | works | none |
 | MENU | `EN_MENU` (22) | Global (second switch) → `HomeOptions` | Menu of all modes. | Phase 5 (`sim_modes.sh`, Starter Kit): Menu grid; `LED 22,1,0`. Audit: jog +2, + and PUSH opened Next Sequence (`LED 22,0,0`, `LED 16,1,0`). | works | none |
 | SHIFT | `EN_SHIFT` (31) | Dispatcher only | Modifier: secondary functions, SHIFT + pad. | Press / release logged; panel toggle lit; SHIFT functions arrive as their own ids (above). | works | none |
-| FULL LEVEL | `EN_FULL_LEVEL` (48) | Global → `setHalfLevel(false)` + `LED 48,1,0` | Pads play at full velocity. | `LED 48,1,0`; key lit. | works | none |
-| 16 LEVELS | `EN_16LEVELS` (50) | none | Spreads one sound over 16 pads by level. | `In screen 50`, nothing. | missing | code |
-| ERASE | `EN_ERASE` (52) | Focused control; Grid deletes notes; AssignSample clears a pad | Erases the selection. | On MAIN and in GRID: handled, nothing (no notes). | missing | content |
+| FULL LEVEL | `EN_FULL_LEVEL` (48) | `PadModifiers` (replaces the global case) | Toggle: every pad hit plays at velocity 127; switches HALF LEVEL off. | Phase 5: `LED 49,0` then `LED 48,1` (and `48,0` when toggled off); a velocity-30 kick hit (-21.2 dBFS) peaks at -7.0 dBFS, the same as a velocity-127 hit. Off by default: project load now sends both LEDs' state instead of always lighting FULL LEVEL. | works | none |
+| 16 LEVELS | `EN_16LEVELS` (50) | `PadModifiers` (new) | Toggle: the last pad hit is spread over the 16 pads, pad 1 softest to pad 16 loudest. | Phase 5: `LED 50,1`; `PAD cmd=10 data=1,14 x16,7,15,23,...,127` (the hat's colour, dim to bright); pads 1-16 then play the closed hat at -40.5, -33.5, ... -12.7 dBFS, each louder than the last. | works | none |
+| ERASE | `EN_ERASE` (52) | `PadModifiers` (held + pad); Grid deletes the selected notes (now on the press only); AssignSample clears a pad; the panel now sends its release | Held with a pad: erases that pad's notes from the selected track; alone: erases the screen's selection. | Phase 5: ERASE + Pad 3 logs `ERASE pad 3 note 2: 20 notes erased from track 1` and the 2-bar playback of the Drums track loses the hats (13 → 12 onsets); ERASE + all pads: 0 onsets. GRID: a selected note is deleted. | works | none |
 | LINK | `EN_LINK` (47) | Global → `KnobEdit::knobLongPress()` | Q-Link page select (long press). | Phase 5 (`sim_modes.sh`, Starter Kit): `In screen 47`, reaches `knobLongPress`; no visible change on Main (Q-Link pages: phase 5b). No crash. | partial | none (phase 5b) |
-| + (PLUS) | `EN_PLUS` (21) | Focused control `knobRotated(+)`; StepSeq nudge | Increments the focused value. | On MAIN / in STEP SEQ: handled, no change (no focus, no steps). In MENU it seemed to advance the selection (see MENU). | partial | content |
-| - (MINUS) | `EN_MINUS` (27) | Same | Decrements. | On MAIN: handled, no change. | missing | content |
-| BACK | `EN_BACK` (29) | Navigation key → focused control; no screen uses it | Goes back one screen. | `In screen 29`, nothing, also in MENU. | missing | code |
-| COPY | `EN_COPY` (20) | Grid only (`pasteSelectedNotesDefault`) | Copies the selection. | Handled, nothing (no notes). | missing | content |
-| PUSH (jog click) | `EN_KNOB_ENTER` (26) | Focused control `knobClicked()`; Browser / menus | Enter / select. | MENU: opens the item. BROWSE: tried to load and raised the "Selected file cannot be loaded" popup. MAIN / PREFS: nothing. | partial | content |
+| + (PLUS) | `EN_PLUS` (21) | Focused control `knobRotated(+)`; StepSeq nudge; MENU next item | Increments the touched (focused) value. | Phase 5: touch LEVEL of track 1, + + → 38 → 40 (`is Navigation message`). Needed the simulator focus fix (below). In MENU it moves the selection. | works | none |
+| - (MINUS) | `EN_MINUS` (27) | Same | Decrements. | Phase 5: touched LEVEL 40 → 39. | works | none |
+| BACK | `EN_BACK` (29) | `KickHome::goBack` (new): the current screen's header back arrow | Goes back one screen. | Phase 5: from BROWSE and PROG EDIT back to MAIN (`BACK: header back of screen 1019 / 1008`, MAIN LED). MAIN and the Projects screen have no back arrow and stay. | works | none |
+| COPY | `EN_COPY` (20) | Grid only (`pasteSelectedNotesDefault`) | Copies the selection (pastes it right after itself). | Phase 5: GRID, arrow tool, touch the first hat, COPY: a copy appears on the next step (screenshot). Elsewhere the app gives COPY no job; `KickCopy` / `KickErase` dialogs exist in `modes/` but nothing opens them. | works (GRID) | none |
+| PUSH (jog click) | `EN_KNOB_ENTER` (26) | Focused control `knobClicked()`; Projects, MENU, BROWSE | Enter / select. | Projects: loads the highlighted project. MENU: jog 2, + 1, PUSH opens the 4th item (NEXT SEQ, `LED 16,1`). A touched value control opens its options. | works | none |
 
 ## Loaded state: jog wheel, encoders and slider
 
@@ -213,14 +213,14 @@ Driven with `sim_ctl.sh turn` / `sim_turn.sh` (one KNOBS packet per detent) and
 
 | Control | Packet id | Handler(s) | Device behaviour | Observed in simulator | Status | Gap class |
 |---|---|---|---|---|---|---|
-| Jog wheel | KNOBS knob 0, cmd 0 | Focused control `knobRotated`; else the screen (Main rows, Grid note edit, Browser list) | Scrolls / edits. | MAIN, GRID, PREFS, SAMPLE EDIT, TRACK MIX, BROWSE: `register handle command`, no visible change. | missing | content |
-| P1-P4 on MAIN | KNOBS knob 1-4, cmd 1 | Main tab `knobCommand` → `linkRotated` | Edits the row's parameters. | +3 / -2 on each: handled, no change (no rows). | missing | content |
+| Jog wheel | KNOBS knob 0, cmd 0 | Focused control `knobRotated`; else the screen (Main rows, Grid note edit, Browser list, MENU) | Scrolls / edits. | Phase 5: MAIN Track tab: +1 / -1 selects the next / previous track (the pads recolour for its program); a touched LEVEL: +3 → 39 → 42; MENU: moves the selection. | works | none |
+| P1-P4 on MAIN | KNOBS knob 1-4, cmd 1 | Main tab `knobCommand` → `linkRotated` | Track tab: the first row's I/P MIDI CH, LENGTH, LEVEL, TRANSPOSE (P5-P16 the next rows, via the Q-Link pages). | Phase 5: P3 +5 LEVEL 42 → 47, P4 +2 TRANSPOSE 0 → 2 (screenshots). TRACK MIX: P2 -10 level 100 → 90, P3 -3 pan 0 → -1.00. STEP SEQ: P1-P4 = the level of steps 1-4 of the page (P2 -4 sets step 2, `PAD cmd=10`). | works | none |
 | P1 in NEXT SEQ | KNOBS knob 1 | `KickNextSequenceMode::knobCommand` | Sequence BPM. | Fixed (phase 5): null sequence guarded, no crash with an empty project. Starter Kit: BPM 120 → 122, the list now refreshes. | works | none |
 | P1 in TRACK MIX | KNOBS knob 1 | `ChannelMixer::knobCommand` | Row 1 OUT; P2 level, P3 pan. | Fixed (phase 5): empty table and the Output / Midi tab casts guarded; the row maths now measures from the Kick screen in the simulator. Starter Kit: P2 level 100 → 50. | works | none |
 | P1 in PAD MIX | KNOBS knob 1 | `PadMixer::handleCommand` → `PadMixerContent::knobCommand` | Pad A01 level. | Fixed (phase 5): empty table guarded, row off-by-one fixed. Starter Kit: A01 level 1.00 → 0.00. | works | none |
 | P1 in SAMPLER | KNOBS knob 1 | Sampler `knobCommand` | Max record length. | Max Length 00:20 → 00:21; slider LED `SLIDER cmd=1 data=35`. | works | none |
-| P1-P4 in NOTES, FX, GRID, LOOPER, PREFS, LINK EDIT, MIDI CTRL, PROG EDIT, SAMPLE EDIT | KNOBS | Screen `knobCommand` | Screen-specific parameters. | Handled; no crash; no visible change. | missing | content |
-| Slider | SLIDER 0-100 | Focused control `sliderMoved` only (`kick_ControlBase.h`) | Sets the value the screen assigns (focused control). | On MAIN, FX, TRACK MIX, PAD MIX, PREFS: `register handle command`; nothing. No control had focus. | missing | code / content |
+| P1-P4 in NOTES, FX, GRID, LOOPER, PREFS, LINK EDIT, MIDI CTRL, PROG EDIT, SAMPLE EDIT | KNOBS | Screen `knobCommand` | Screen-specific parameters. | PROG EDIT (drum, keygroup, clip) assigns nothing to the Q-Links (only the audio program grid reads them). It used to treat each Q-Link packet as a pad hit: P1 played note 1 at velocity 1 and relabelled the pad "A02"; fixed in phase 5 (`kick_ProgramEdit.cpp`). Others not re-checked in phase 5 (pads and encoders). | partial | code (no assignment) |
+| Slider | SLIDER 0-100 | Focused control `sliderMoved` (`kick_ControlBase.h`) | The touch strip sets the touched (focused) control, as the jog and + / - do; the app shows that control's value, or on MAIN's Track tab the track meter, on the strip's LEDs. | Phase 5: touch LEVEL of track 1, slider 30 → LEVEL 100 → 38 (30 % of 0-127). Before, the simulator could not give a control focus (below). The panel's LED ladder now shows the app's `SLIDER cmd=1/2` values. | works | none |
 | MASTER, REC pots | none | none | Analogue pots on the unit. | Turn in the UI; no packet (by design). | works | none |
 
 ## Gaps by class
@@ -318,3 +318,28 @@ screenshots and the result table are in `docs/sim_audit/phase5_modes/`.
 - **Still different from the device**: program LEVEL (TRACK MIX) and pad LEVEL (PAD MIX) change on
   screen but not in the sound (engine, see 4.8); FX (XY) is not connected to audio in this
   release; there is no automation (AUTO).
+
+
+## Phase 5 (pads and encoders)
+
+Date: 2026-10-27. `Kick/tools/sim_pads.sh` (see `docs/DEVELOPMENT.md` 4.9) plays and measures
+every control in the rows above on the Starter Kit: last run 8 audio measurements and 18 packet /
+LED checks, all passed. Results and screenshots: `docs/sim_audit/phase5_pads/`.
+
+- **New handlers** (shared code, `kick_ui/dialogs/kick_PadModifiers.cpp`): FULL / HALF LEVEL
+  are exclusive toggles that set the velocity of every pad hit (127 / 64); 16 LEVELS; NOTE REPEAT
+  (held) and LATCH; ERASE held + pad erases the pad's notes. They rewrite pad packets before the
+  screen sees them, so MAIN, GRID, TRACK MIX, PROG EDIT and NOTES all get them. BACK runs the
+  current screen's header back arrow (`KickHome::goBack`).
+- **Fixed** (shared code): FULL LEVEL was lit at every project load but never applied; the LEDs now
+  follow the state. PROG EDIT read Q-Link packets as pad hits. GRID's ERASE ran on the key's
+  release too.
+- **Simulator**: a touched control now takes focus with the screen locked (it did not, so the jog,
+  + / -, PUSH and the slider never reached a control); ERASE and NOTE REPEAT send their release;
+  `sim_ctl.sh down / up / hold` hold pads and keys with a velocity; a SHIFT function's LED (HALF
+  LEVEL, LATCH, ...) shows on the key it is printed under; the slider's LED ladder shows the app's
+  value; step and 16 LEVELS pad colours are dimmed by velocity.
+- **Still different**: banks E-H have no sounds in the Starter Kit; PROG EDIT gives the Q-Links
+  nothing to edit; key releases are assumed for ERASE and NOTE REPEAT only (AppAssignSample already
+  expects ERASE's release; the other keys stay press-only because several screens act on any
+  button packet).

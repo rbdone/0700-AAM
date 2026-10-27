@@ -83,10 +83,14 @@ namespace sim
     public:
         explicit PadButton( int Index );
 
-        void set( int ColourId, int State );
+        void set( int ColourId, int State, int Velocity = 127 ); // velocity: brightness (step / 16 LEVELS colours)
         void paintButton( juce::Graphics& g, bool highlighted, bool down ) override;
         void mouseDown( const juce::MouseEvent& e ) override;
         void buttonStateChanged() override;
+
+        /// Scripted press / release (sim_ctl.sh down / up / hold): sends the packet without
+        /// touching the button's mouse state. Velocity < 1 keeps the last one.
+        void scriptedHold( bool Down, int Velocity = -1 );
 
     private:
         void send( int BtnState, int Velocity );
@@ -94,8 +98,9 @@ namespace sim
         const int index;
         int       colourId{ DCC::PadColourTrans };
         int       state{ DCC::StateOff };
+        int       brightness{ 127 };
         int       velocity{ 100 }; // set from the click position; accessibility clicks keep the default
-        bool      wasDown{ false };
+        bool      wasDown{ false }, scriptedDown{ false };
     };
 
     //==============================================================================================
@@ -132,7 +137,15 @@ namespace sim
         void buttonStateChanged() override;
         void clicked() override;
 
+        /// Scripted press / release (sim_ctl.sh down / up / hold).
+        void scriptedHold( bool Down );
+
+        /// Keys whose release matters to the app (ERASE + pad, NOTE REPEAT held) also report
+        /// it, as the unit does for SHIFT and ERASE (AppAssignSample handles ERASE's release).
+        bool sendsRelease() const noexcept { return id == DCC::EN_ERASE || id == DCC::EN_NOTE_REPEAT; }
+
     private:
+        void press( bool Down );
         void drawIcon( juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c ) const;
 
         juce::String caption;
@@ -141,7 +154,8 @@ namespace sim
         const bool   toggle;
         const Shape  shape;
         const Icon   icon;
-        bool         led{ false }, wasDown{ false };
+        bool         led{ false }, wasDown{ false }, scriptedDown{ false };
+        int          sentId{ -1 }; // the id the last press reported (the SHIFT function while SHIFT was on)
     };
 
     //==============================================================================================
@@ -183,6 +197,7 @@ namespace sim
         void handleFromApp( CPktMgr::HWMsg_t& msg );
         void handlePadMessage( const CPktMgr::HWMsg_t& msg );
         void handleLedMessage( const CPktMgr::HWMsg_t& msg );
+        void handleSliderMessage( const CPktMgr::HWMsg_t& msg );
 
         SurfaceButton& addButton( const juce::String& Caption, int Id, juce::Colour Led, bool Toggle = false, SurfaceButton::Shape S = SurfaceButton::Shape::Key, SurfaceButton::Icon I = SurfaceButton::Icon::None );
         Caption&       addCaption( const juce::String& Text, int Id = -1, juce::Justification J = juce::Justification::centred );
@@ -207,6 +222,13 @@ namespace sim
         EndlessKnob  jog{ KnobLookAndFeel::Style::Jog, 4.f };
 
         int commTicks{ 0 };
+
+        // LED state per id as the app last set it: a key lights when its own LED or the LED of
+        // its SHIFT function is on (HALF LEVEL on FULL LEVEL, LATCH on NOTE REPEAT).
+        std::map<int, bool> ledOn;
+        // The slider's LED ladder as the app last set it (EN_SLIDER_BAR_LED / LEVEL_LED), -1 = none.
+        int sliderLed{ -1 };
+        bool sliderLedCentred{ false };
 
         sigslot::scoped_connection fromAppConnection;
 

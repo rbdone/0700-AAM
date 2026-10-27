@@ -244,17 +244,20 @@ namespace sim
         setMouseCursor( juce::MouseCursor::PointingHandCursor );
     }
 
-    void PadButton::set( int ColourId, int State )
+    void PadButton::set( int ColourId, int State, int Velocity )
     {
-        colourId = ColourId;
-        state    = State;
+        colourId   = ColourId;
+        state      = State;
+        brightness = juce::jlimit( 0, 127, Velocity );
         repaint();
     }
 
     void PadButton::paintButton( juce::Graphics& g, bool, bool pressed )
     {
+        pressed = pressed || scriptedDown;
         auto       bounds = getLocalBounds().toFloat().reduced( 1.f );
-        const auto base   = padColourFor( colourId );
+        // Dimmer for a lower velocity (STEP SEQ steps, 16 LEVELS): towards the unlit pad colour.
+        const auto base   = padColourFor( colourId ).interpolatedWith( juce::Colour( 0xff2b2b2b ), 0.8f * ( 1.f - (float)brightness / 127.f ) );
         const bool lit    = state != DCC::StateOff && colourId != DCC::PadColourTrans;
 
         // Rubber pad.
@@ -279,6 +282,15 @@ namespace sim
     void PadButton::send( int BtnState, int Velocity )
     {
         SimulatorHub::get().sendToApp( makeMsg( CPktMgr::EN_PKT_TYPE_PAD, DCC::EN_PAD_STATE, { DCC::EN_PAD1 + index, BtnState, Velocity, aftertouch } ) );
+    }
+
+    void PadButton::scriptedHold( bool Down, int Velocity )
+    {
+        if( Down == scriptedDown ) return;
+        scriptedDown = Down;
+        if( Down && Velocity > 0 ) velocity = juce::jlimit( 1, 127, Velocity );
+        send( Down ? DCC::BTN_PRESSED : DCC::BTN_RELEASED, Down ? velocity : 0 );
+        repaint();
     }
 
     void PadButton::mouseDown( const juce::MouseEvent& e )
@@ -325,8 +337,27 @@ namespace sim
         // The unit reports keys on press, not on release. Following the down state means the
         // mouse and accessibility clicks (triggerClick) behave the same.
         const bool down = isDown();
-        if( down && !wasDown && !toggle ) sendButtonPacket( isShiftHeld() ? shiftedIdFor( id ) : id, DCC::BTN_PRESSED );
+        if( down != wasDown && !toggle ) press( down );
         wasDown = down;
+    }
+
+    void SurfaceButton::press( bool Down )
+    {
+        if( Down )
+        {
+            sentId = isShiftHeld() ? shiftedIdFor( id ) : id;
+            sendButtonPacket( sentId, DCC::BTN_PRESSED );
+        }
+        else if( sendsRelease() && sentId >= 0 )
+            sendButtonPacket( sentId, DCC::BTN_RELEASED );
+    }
+
+    void SurfaceButton::scriptedHold( bool Down )
+    {
+        if( Down == scriptedDown || toggle ) return;
+        scriptedDown = Down;
+        press( Down );
+        repaint();
     }
 
     void SurfaceButton::clicked()
@@ -381,6 +412,7 @@ namespace sim
 
     void SurfaceButton::paintButton( juce::Graphics& g, bool, bool pressed )
     {
+        pressed = pressed || scriptedDown;
         auto       r   = getLocalBounds().toFloat().reduced( 1.f );
         const bool lit = led || ( toggle && getToggleState() );
         const auto c   = lit ? ledColour : ledColour.withAlpha( 0.32f );
@@ -704,7 +736,8 @@ namespace sim
         {
             case CPktMgr::EN_PKT_TYPE_PAD: handlePadMessage( msg ); break;
             case CPktMgr::EN_PKT_TYPE_LED: handleLedMessage( msg ); break;
-            default: break; // SYSTEM (tempo, reconnect...), SLIDER LEDs, MIDI, CV: nothing to show.
+            case CPktMgr::EN_PKT_TYPE_SLIDER: handleSliderMessage( msg ); break;
+            default: break; // SYSTEM (tempo, reconnect...), MIDI, CV: nothing to show.
         }
     }
 
@@ -716,9 +749,12 @@ namespace sim
         switch( msg.pktCmd )
         {
             case DCC::EN_PAD_SET_SINGLE_PAD: // pad, state, colour
-            case DCC::EN_PAD_SET_STEP_SINGLE_PAD: // pad, state, colour, velocity
             case DCC::EN_PAD_SET_BLINKING: // pad, state, on colour, off colour
                 if( at( 0 ) >= 0 && at( 0 ) < 16 ) pads[(size_t)at( 0 )]->set( at( 2 ), at( 1 ) );
+                break;
+
+            case DCC::EN_PAD_SET_STEP_SINGLE_PAD: // pad, state, colour, velocity
+                if( at( 0 ) >= 0 && at( 0 ) < 16 ) pads[(size_t)at( 0 )]->set( at( 2 ), at( 1 ), at( 3, 127 ) );
                 break;
 
             case DCC::EN_PAD_SET_ALL_SINGLE_COLOUR: // state, colour
@@ -726,8 +762,11 @@ namespace sim
                 break;
 
             case DCC::EN_PAD_SET_ALL_MULTI_COLOUR: // state, colour x16
-            case DCC::EN_PAD_SET_STEP_ALL_PAD: // state, colour x16, velocity x16
                 for( size_t i = 0; i < 16; ++i ) pads[i]->set( at( 1 + i ), at( 0 ) );
+                break;
+
+            case DCC::EN_PAD_SET_STEP_ALL_PAD: // state, colour x16, velocity x16 (STEP SEQ, 16 LEVELS)
+                for( size_t i = 0; i < 16; ++i ) pads[i]->set( at( 1 + i ), at( 0 ), at( 17 + i, 127 ) );
                 break;
 
             case DCC::EN_PAD_SET_COLOUR_STATE: // colour x16, state x16
@@ -748,18 +787,47 @@ namespace sim
             // Banks: the app only ever sends "bank N on" (kick_leds.cpp, setBankMessage) and never
             // switches the previous bank off, so the surface shows one bank at a time. Banks E-H
             // are SHIFT + A-D and light the key they are printed under.
-            if( id >= DCC::EN_BANK_A && id <= DCC::EN_BANK_H && d[1] != DCC::StateOff )
+            if( id >= DCC::EN_BANK_A && id <= DCC::EN_BANK_H )
             {
+                if( d[1] == DCC::StateOff ) return;
                 for( int b = DCC::EN_BANK_A; b <= DCC::EN_BANK_D; ++b ) buttonsById[b]->setLed( false );
-                id = DCC::EN_BANK_A + ( id - DCC::EN_BANK_A ) % 4;
+                buttonsById[DCC::EN_BANK_A + ( id - DCC::EN_BANK_A ) % 4]->setLed( true );
+                return;
             }
-            if( auto it = buttonsById.find( id ); it != buttonsById.end() )
-                it->second->setLed( d[1] != DCC::StateOff );
+            // Other SHIFT functions with an LED (HALF LEVEL, LATCH) have no key of their own: they
+            // show on the key they are printed under, which is lit while either LED is on.
+            ledOn[id] = d[1] != DCC::StateOff;
+            int key   = id;
+            if( !buttonsById.count( key ) )
+                for( const auto& [primary, button] : buttonsById )
+                    if( shiftedIdFor( primary ) == id ) key = primary;
+            if( auto it = buttonsById.find( key ); it != buttonsById.end() )
+            {
+                const int secondary = shiftedIdFor( key );
+                it->second->setLed( ledOn[key] || ( secondary != key && ledOn[secondary] ) );
+            }
         }
         else if( msg.pktCmd == DCC::EN_LED_SET_ALL )
         {
             const bool on = !d.empty() && d[0] != DCC::StateOff;
             for( auto& b : buttons ) b->setLed( on );
+        }
+    }
+
+    void Simulator::handleSliderMessage( const CPktMgr::HWMsg_t& msg )
+    {
+        // The app shows a value on the slider's LED ladder: the focused control's value
+        // (EN_SLIDER_BAR_LED from the bottom, EN_SLIDER_LEVEL_LED from the centre for pan-like
+        // controls) or, on MAIN's Track tab, the track meter.
+        if( msg.data.empty() || ( msg.pktCmd != DCC::EN_SLIDER_BAR_LED && msg.pktCmd != DCC::EN_SLIDER_LEVEL_LED ) )
+            return;
+        const int  value   = juce::jlimit( 0, 100, (int)msg.data[0] );
+        const bool centred = msg.pktCmd == DCC::EN_SLIDER_LEVEL_LED;
+        if( value != sliderLed || centred != sliderLedCentred )
+        {
+            sliderLed        = value;
+            sliderLedCentred = centred;
+            repaint( 95, 640, 30, 270 );
         }
     }
 
@@ -822,7 +890,13 @@ namespace sim
         g.fillRoundedRectangle( 25.f, 635.f, 110.f, 270.f, 8.f );
         for( int i = 0; i < 17; ++i )
         {
-            g.setColour( i == 2 ? ledRed : juce::Colour( 0xff444444 ) );
+            // Tick i = 0 is the top (100 %), 16 the bottom (0 %). Lit up to the app's value, or
+            // from the centre to it for a centred (level / pan) value.
+            const int  pos = ( 16 - i ) * 100 / 16;
+            const bool lit = sliderLed >= 0
+                             && ( sliderLedCentred ? ( ( pos >= 50 && pos <= sliderLed ) || ( pos <= 50 && pos >= sliderLed ) )
+                                                   : ( sliderLed > 0 && pos <= sliderLed ) );
+            g.setColour( lit ? ledRed : juce::Colour( 0xff444444 ) );
             g.fillRect( 104.f, 650.f + (float)i * 15.f, i % 4 == 0 ? 12.f : 8.f, 2.f );
         }
 
