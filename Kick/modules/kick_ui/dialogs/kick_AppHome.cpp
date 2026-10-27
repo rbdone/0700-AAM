@@ -332,6 +332,25 @@ namespace kick_ui
         dynamic_cast<AppAssignSample*>( screens_[Screen::MenuAssignSample].get() )->startup();
     }
 
+    void KickHome::toggleMasterTempo()
+    {
+        // MASTER (SHIFT + TAP TEMPO): the selected sequence follows either its own tempo or the
+        // project's master tempo (the "Global" toggle of the sequence on the Main screen).
+        auto&      ae  = mt::getAudioInterface();
+        const auto seq = ae.getSelectedSequence();
+        auto       pSeq = ae.getSequenceData( seq );
+        if( pSeq == nullptr )
+            return;
+
+        const bool toMaster = !pSeq->isMasterBPM.get();
+        const auto bpm      = ae.setSequenceBPMToMaster( seq, toMaster );
+        contracts::DclSignals::sendCommandToDcl( toMaster ? contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_MASTER )
+                                                          : contracts::DclContractsHelper::setLEDOFFMessage( contracts::DeviceControlContracts::EN_MASTER ) );
+        const auto msg = juce::String( toMaster ? "Master Tempo" : "Sequence Tempo" ) + ": " + juce::String( bpm ) + " BPM";
+        juce::Logger::writeToLog( "Tempo source: " + pSeq->name.get() + " " + msg );
+        mt::utils::showNotification( msg );
+    }
+
     void KickHome::handleCommand( CPktMgr::HWMsg_t& f_HwMsg )
     {
         auto&        ae        = mt::getAudioInterface();
@@ -430,6 +449,19 @@ namespace kick_ui
                             break;
                         case contracts::DeviceControlContracts::EN_SAVE:
                             ae.saveProject();
+                            break;
+
+                        // TC, ON/OFF (SHIFT + TC) and MASTER (SHIFT + TAP TEMPO) had no handler.
+                        case contracts::DeviceControlContracts::EN_TC: TimingCorrect::showWindow(); break;
+                        case contracts::DeviceControlContracts::EN_ON_OFF: TimingCorrect::setEnabled( !TimingCorrect::isEnabled() ); break;
+                        case contracts::DeviceControlContracts::EN_MASTER: toggleMasterTempo(); break;
+                        case contracts::DeviceControlContracts::EN_AUTOMATION:
+#ifdef SIM_BUILD
+                            // There is no automation engine in this release (the header's
+                            // Automation button has an empty onClick too): say so.
+                            juce::Logger::writeToLog( "SimUnavailable: Automation (no automation engine in this firmware)" );
+                            mt::utils::showNotification( "Automation is not available in this firmware" );
+#endif
                             break;
 
                         default: break;

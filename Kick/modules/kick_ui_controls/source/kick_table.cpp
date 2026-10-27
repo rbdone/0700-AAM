@@ -255,7 +255,18 @@ namespace ui
     {
         int              rowHeight      = canvas.rowHeight;
         int              rowWidth       = canvas.rowWidth;
-        auto             viewPos        = canvas.getScreenPosition();
+#ifdef SIM_BUILD
+        // On the unit the Kick screen is the whole display, so the canvas's desktop position is its
+        // position on the 1024x600 screen, which the Q-Link row maths below assumes. The simulator
+        // draws that screen scaled and offset inside its front panel (a transform on the screen's
+        // root component): measure from that root instead of the desktop.
+        juce::Component* root = &canvas;
+        while( root->getParentComponent() != nullptr && !root->isTransformed() )
+            root = root->getParentComponent();
+        auto viewPos = root->getLocalPoint( &canvas, juce::Point<int>() );
+#else
+        auto viewPos = canvas.getScreenPosition();
+#endif
         auto             startingHeight = height;
         auto             startingWidth  = width;
         std::vector<int> rows;

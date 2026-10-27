@@ -433,6 +433,7 @@ class Project:
         self.slices = {}      # path -> [semitones of slice 0, 1, ...]
         self.programs = []    # (id, name, type, [(note, path, semi, extra_attrs)], {pad: colour id})
         self.tracks = []      # (id, name, program id, level 0-127, [(start, length, note, velocity)])
+        self.extra_sequences = []  # (id, name, bars, own bpm or None for the master tempo, tracks like above)
 
     def file(self, rel):
         if rel not in self.files:
@@ -450,6 +451,16 @@ class Project:
         if semi not in semis:
             semis.append(semi)
         return semis.index(semi)
+
+    @staticmethod
+    def render_tracks(o, tracks, bars):
+        for tid, name, prog, level, notes in tracks:
+            o.append('      <TRACK id="%s" name="%s" program="%s" usingSequenceLength="1" length="%d" level="%d">' % (tid, xml_escape(name), prog, bars, level))
+            o.append('        <NOTELIST>')
+            for i, (start, length, note, vel) in enumerate(sorted(notes), start=1):
+                o.append('          <NOTE id="%d" no="%d" velocity="%d" start="%d" length="%d"/>' % (i, note, vel, start, length))
+            o.append('        </NOTELIST>')
+            o.append('      </TRACK>')
 
     def render(self):
         for _, _, _, pads, _ in self.programs:  # register every tuned slice before writing FILEMANAGER
@@ -497,14 +508,17 @@ class Project:
         o.append('  </PROGRAMS>')
         o.append('  <SEQUENCES>')
         o.append('    <SEQUENCE id="skSeq001" name="Sequence 01" length="4" loop="1" loopStart="0" loopEnd="4" isMasterBPM="1">')
-        for tid, name, prog, level, notes in self.tracks:
-            o.append('      <TRACK id="%s" name="%s" program="%s" usingSequenceLength="1" length="4" level="%d">' % (tid, xml_escape(name), prog, level))
-            o.append('        <NOTELIST>')
-            for i, (start, length, note, vel) in enumerate(sorted(notes), start=1):
-                o.append('          <NOTE id="%d" no="%d" velocity="%d" start="%d" length="%d"/>' % (i, note, vel, start, length))
-            o.append('        </NOTELIST>')
-            o.append('      </TRACK>')
+        self.render_tracks(o, self.tracks, 4)
         o.append('    </SEQUENCE>')
+        for sid, sname, bars, bpm, tracks in self.extra_sequences:
+            o.append('    <SEQUENCE id="%s" name="%s" length="%d" loop="1" loopStart="0" loopEnd="%d" isMasterBPM="%d">'
+                     % (sid, xml_escape(sname), bars, bars, 0 if bpm else 1))
+            if bpm:  # the sequence's own tempo (MTSequence is a MTTempoMgr on its TEMPOS child)
+                o.append('      <TEMPOS>')
+                o.append('        <TEMPO bpm="%.1f" num="4" den="4"/>' % bpm)
+                o.append('      </TEMPOS>')
+            self.render_tracks(o, tracks, bars)
+            o.append('    </SEQUENCE>')
         o.append('  </SEQUENCES>')
         o.append('</ROOT>')
         return "\n".join(o) + "\n"
@@ -561,6 +575,36 @@ def loop_pattern():
     return [(bar * BAR, BAR, 1, 100) for bar in range(4)]
 
 
+def sequence_two():
+    """Sequence 02 (phase 5, mode keys): a second sequence for NEXT SEQ, at its own tempo of
+    100 BPM (MASTER, SHIFT + TAP TEMPO, switches it to the 120 BPM master tempo), whose drum
+    track is "played live": every hit is a few ticks off the 16th grid, deterministically, so
+    TC (Timing Correct) has something to correct. Two bars of a half-time groove."""
+    rng = random.Random(502)
+    hits = []
+    for bar in range(2):
+        for step in range(16):
+            notes = []
+            if step in (0, 10):
+                notes.append((0, 118))                       # kick
+            if step == 8:
+                notes.append((1, 112))                       # snare on 3 (half time)
+            if step % 2 == 0:
+                notes.append((2, 100 if step % 4 else 108))  # closed hat
+            if bar == 1 and step == 14:
+                notes.append((3, 96))                        # open hat
+            for note, vel in notes:
+                off = rng.randint(-9, 9)                     # up to 9 of the 24 ticks of a 16th
+                if bar == 0 and step == 0:
+                    off = abs(off) or 5                      # nothing before the start
+                hits.append((bar * BAR + step * STEP + off, STEP, note, vel))
+    tracks = [
+        ("skTrk101", "Drums Live", "skPrg001", 100, hits),
+        ("skTrk102", "Loops", "skPrg003", 80, [(0, BAR, 0, 100)]),  # the drum loop once
+    ]
+    return ("skSeq002", "Sequence 02", 2, 100.0, tracks)
+
+
 def build():
     sounds = {}
     for name, gen in KIT:
@@ -612,6 +656,7 @@ def build():
     p.tracks.append(("skTrk001", "Drums", "skPrg001", 100, drum_pattern()))
     p.tracks.append(("skTrk002", "Keys", "skPrg002", 70, keys_pattern()))
     p.tracks.append(("skTrk003", "Loops", "skPrg003", 80, loop_pattern()))
+    p.extra_sequences.append(sequence_two())
 
     os.makedirs(PROJECT_DIR, exist_ok=True)
     with open(os.path.join(PROJECT_DIR, "Starter Kit.kickPrj"), "w", newline="\n") as f:
