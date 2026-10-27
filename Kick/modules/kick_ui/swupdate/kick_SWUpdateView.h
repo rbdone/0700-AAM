@@ -105,6 +105,13 @@ namespace kick_ui
         void                    setupProvider();
         void                    refresh();
         kick_ui::KickModeHeader header{ "Firmware Update", "Icon_SettingsScreen" };
+#ifdef SIM_BUILD
+        // Covers the update list; the header's back arrow and "Go Back" stay usable.
+        ui::SimUnavailable simUnavailable{ "Firmware update",
+                                           "Updates come from a .swu image on an SD card or USB drive, or from the PC app over USB "
+                                           "(/dev/usb-utp0), and are installed by swupdate on the unit. The simulator does not scan for or install firmware.",
+                                           centreBounds };
+#endif
         void                    updateDeviceData( const juce::String& deviceName, const juce::String& version, bool hasImage );
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( SWUpdateView )
     };

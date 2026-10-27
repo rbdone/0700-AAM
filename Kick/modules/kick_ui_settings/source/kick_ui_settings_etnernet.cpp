@@ -34,6 +34,10 @@ namespace kick_ui
     SettingsEthernet::SettingsEthernet()
         : SettingsInterface( 6, 3, true )
     {
+#ifdef SIM_BUILD
+        simUnavailable = std::make_unique<ui::SimUnavailable>(
+            "Ethernet", "On the unit eth0 is configured with ifconfig and udhcpc. The simulator uses the host computer's network as it is and never changes it." );
+#endif
         ui::KickGrid::setBackgroundColour( juce::Colours::transparentBlack );
         setRowTitles( { "ETHERNET SETTINGS", "IP ADDRESS", "SUBNET MASK", "GATEWAY", "DNS SERVER" } );
 

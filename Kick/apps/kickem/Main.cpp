@@ -21,6 +21,7 @@
  */
 
 #include "simulator/kick_Simulator.h"
+#include "simulator/kick_SimControl.h"
 
 #include "kick_ui/kick_ui.h"
 #include "audio_engine/audio_engine.h"
@@ -49,10 +50,14 @@ public:
         mt::getAudioInterface();
 
         window = std::make_unique<MainWindow>( getApplicationName() );
+
+        // Opt-in scripting channel (KICK_SIM_CONTROL=<file>, see kick_SimControl.h).
+        control = std::make_unique<sim::SimControl>( *window->getContentComponent(), kick_ui::KickHome::Instance() );
     }
 
     void shutdown() override
     {
+        control = nullptr;
         window  = nullptr;
         adapter = nullptr;
     }
@@ -95,6 +100,7 @@ public:
 
 private:
     std::unique_ptr<MainWindow>                window;
+    std::unique_ptr<sim::SimControl>           control;
     std::unique_ptr<KickDeviceAdapter>         adapter;
     std::unique_ptr<KickAudioEngineAdapter>    engineAdapter;
     std::shared_ptr<contracts::AudioInterface> audioInterface;

@@ -9,6 +9,9 @@
 #   KICK_SIM_AUDIO_PROBE=<file.wav>   write the master output to a WAV, log peak/RMS per second
 #   KICK_SIM_AUDIO_INPUT=tone|tone:<hz>|pulse|<file>   replace the audio input with a test source
 #
+# The in-app scripting channel used by sim_ctl.sh is always on: KICK_SIM_CONTROL defaults to
+# Kick/build/.sim_ctl (emptied here), and the log path is recorded in Kick/build/.sim_log.
+#
 # Only one KT_KickEM can run on a machine: the app refuses a second instance, and the press
 # helper and the audio device assume one. This script takes a machine-wide lock
 # (KICK_SIM_LOCK, default /tmp/kt_kickem.lock) and waits up to KICK_SIM_LOCK_WAIT seconds
@@ -53,6 +56,9 @@ done
 
 mkdir -p "$(dirname "$LOG")"
 cd "$BUILD"
+export KICK_SIM_CONTROL=${KICK_SIM_CONTROL:-$PWD/.sim_ctl}
+: > "$KICK_SIM_CONTROL"
+case "$LOG" in /*) echo "$LOG" > .sim_log ;; *) echo "$OLDPWD/$LOG" > .sim_log ;; esac
 "$APP" > "$LOG" 2>&1 &
 PID=$!
 echo "$PID" > "$LOCK/pid"

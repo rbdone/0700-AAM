@@ -78,6 +78,12 @@ namespace kick_ui
         std::string         internalPath = "/home/Kick";
         std::string         sdCardPath   = "/dev/mmcblk1p1";
         std::string         usbDiskPath  = "/dev/sda1";
+#ifdef SIM_BUILD
+        // Covers the meters; Purge All / Purge Unused / OK stay usable.
+        ui::SimUnavailable simUnavailable{ "CPU, RAM and storage meters",
+                                           "The unit reads them from its Linux: /proc/stat, sysinfo, and df on /home/Kick, /mnt/sdcard (SD card) and /mnt/flash (USB drive).",
+                                           { 10, 5, 570, 425 } };
+#endif
     };
 
     class KickSysResources

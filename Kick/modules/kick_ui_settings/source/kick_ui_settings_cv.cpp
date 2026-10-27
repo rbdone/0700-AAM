@@ -33,6 +33,10 @@ namespace kick_ui
     SettingsCV::SettingsCV()
         : SettingsInterface( 5, 4, true )
     {
+#ifdef SIM_BUILD
+        simUnavailable = std::make_unique<ui::SimUnavailable>(
+            "CV / Gate", "The CV and gate outputs, and their calibration, drive the unit's DAC over I2C (/dev/i2c-3). The simulator has no CV hardware." );
+#endif
         ui::KickGrid::setBackgroundColour( juce::Colours::transparentBlack );
         setRowTitles( { "CV Range Settings", "", "", "" } );
 

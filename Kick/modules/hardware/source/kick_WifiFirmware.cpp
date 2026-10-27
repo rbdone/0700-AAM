@@ -44,6 +44,12 @@ namespace mt
 
     juce::String WifiManager::executeCommand( const juce::String& command )
     {
+#ifdef SIM_BUILD
+        // The simulator never runs the unit's network tools (ip, killall, wpa_supplicant,
+        // dhclient) on the host computer.
+        juce::Logger::writeToLog( "SimUnavailable: Wi-Fi command not run: " + command );
+        return {};
+#endif
         juce::ChildProcess process;
         process.start( command );
         process.waitForProcessToFinish( -1 );
@@ -97,6 +103,10 @@ namespace mt
         juce::ChildProcess                                childProcess;
 
         DBG( "-------------------------scanning-----------------------" );
+#ifdef SIM_BUILD
+        juce::Logger::writeToLog( "SimUnavailable: Wi-Fi scan not run: " + command );
+        return _networks;
+#endif
         if( childProcess.start( command ) )
         {
             juce::StringArray tempResults;

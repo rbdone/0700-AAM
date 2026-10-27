@@ -930,6 +930,11 @@ namespace mt
         //date - s "2024-05-15"
         std::string cmd = std::to_string( year ) + "-" + std::to_string( month ) + "-" + std::to_string( day );
         DBG( "Setting Day -> " << cmd );
+#ifdef SIM_BUILD
+        // Never set (or shell out to set) the host computer's clock.
+        juce::Logger::writeToLog( "SimUnavailable: system date not changed (" + juce::String( cmd ) + ")" );
+        return;
+#endif
         // Execute the command
         int result = std::system( cmd.c_str() );
         // Check if the command executed successfully
@@ -947,6 +952,10 @@ namespace mt
     {
         std::string cmd = std::to_string( hour ) + ":" + std::to_string( minute ) + ":00";
         DBG( "Setting Day -> " << cmd );
+#ifdef SIM_BUILD
+        juce::Logger::writeToLog( "SimUnavailable: system time not changed (" + juce::String( cmd ) + ")" );
+        return;
+#endif
         // Execute the command
         int result = std::system( cmd.c_str() );
         // Check if the command executed successfully

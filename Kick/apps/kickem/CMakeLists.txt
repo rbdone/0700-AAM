@@ -51,6 +51,8 @@ target_sources(${TargetName}
         simulator/kick_Simulator.cpp
         simulator/kick_SimulatorInterfaceImpl.h
         simulator/kick_SimulatorInterfaceImpl.cpp
+        simulator/kick_SimControl.h
+        simulator/kick_SimControl.cpp
 )
 
 target_compile_definitions(${TargetName}

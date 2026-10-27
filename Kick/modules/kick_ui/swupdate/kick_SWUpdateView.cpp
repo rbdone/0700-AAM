@@ -52,6 +52,9 @@ namespace kick_ui
         mt::utils::setValueFontHeight( 20, back, apply );
 
         setupProvider();
+#ifdef SIM_BUILD
+        addAndMakeVisible( simUnavailable );
+#endif
     }
 
     void SWUpdateView::refresh()
@@ -214,6 +217,13 @@ namespace kick_ui
 
     void SWUpdateView::visibilityChanged()
     {
+#ifdef SIM_BUILD
+        // No image scan, no USB gadget thread, no "You are on latest Version" claim: the notice
+        // (added in the constructor) says what this screen does on the unit.
+        latestVersionlabel.setVisible( false );
+        checkLabel.setVisible( false );
+        return;
+#endif
         if( isVisible() )
         {
             if( thread == nullptr )

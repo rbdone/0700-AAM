@@ -80,6 +80,9 @@ namespace kick_ui
             mt::utils::exitDialog( this, UI::APPLY );
         };
 
+#ifdef SIM_BUILD
+        addAndMakeVisible( simUnavailable );
+#endif
         ui::themeChanged.connect( [&]() {
             purgeAll.setImages( "purge" );
             purgeUnused.setImages( "purgeused" );
@@ -98,6 +101,9 @@ namespace kick_ui
     }
     void KSystemResources::timerCallback()
     {
+#ifdef SIM_BUILD
+        return; // off Linux these calls leave their results unset; the notice explains instead
+#endif
         double          cpuusage;
         mt::sysRamInfo  rInfo;
         mt::sysSizeInfo sInfo;

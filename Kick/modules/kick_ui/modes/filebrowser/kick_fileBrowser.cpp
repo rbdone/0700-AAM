@@ -25,6 +25,9 @@ namespace ui
         addData( "Icon_Demo", "Icon_DemoActive", 16.0f, 16.0f, "Demos", false );
         mt::utils::addAndMakeVisible( this, header, left, right, bottom, pathLabel, top, auditionComp );
         mt::utils::makeHidden( auditionComp );
+#ifdef SIM_BUILD
+        addAndMakeVisible( storageUnavailable );
+#endif
 
         auditionComp.onGainChanged = [&]( double Value ) {
             settings.preview.mute = auditionComp.isMuted();

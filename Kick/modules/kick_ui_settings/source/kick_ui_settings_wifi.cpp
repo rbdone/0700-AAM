@@ -35,6 +35,10 @@ namespace kick_ui
     SettingsWifi::SettingsWifi()
         : SettingsInterface( 6, 3, true )
     {
+#ifdef SIM_BUILD
+        simUnavailable = std::make_unique<ui::SimUnavailable>(
+            "Wi-Fi", "On the unit Wi-Fi is wpa_supplicant and dhclient on its wlan0 interface. The simulator never scans or changes the host computer's network." );
+#endif
         ui::KickGrid::setBackgroundColour( juce::Colours::transparentBlack );
         setRowTitles( { "", "WIFI SETTINGS", "SSID", "PASSWORD", "Connection/Status" } );
 

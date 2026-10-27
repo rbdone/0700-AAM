@@ -221,6 +221,12 @@ namespace ui
         FileBrowserTopControls    top;
         FileBrowserBottomControls bottom;
         AuditionComponent         auditionComp;
+#ifdef SIM_BUILD
+        // Below the Location rows, where the SD card / USB drive rows appear on the unit.
+        SimUnavailable storageUnavailable{ "SD card / USB drive",
+                                           "The unit lists them here when /dev/mmcblk1 or /dev/sda appears and browses /mnt/sdcard or /mnt/flash.",
+                                           { 14, 352, 336, 124 } };
+#endif
 
         int timerInt = 1;
         int buttonId;

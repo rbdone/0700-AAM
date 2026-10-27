@@ -1,0 +1,281 @@
+/*
+ * Copyright (c) 2024 MUSIC Tribe
+ *
+ * This file is part of Kick.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#include "kick_SimControl.h"
+
+#include <typeinfo>
+
+namespace sim
+{
+    namespace
+    {
+        void log( const juce::String& S ) { juce::Logger::writeToLog( "SimControl: " + S ); }
+
+        bool isInside( const juce::Component* C, const juce::Component* Ancestor )
+        {
+            for( ; C != nullptr; C = C->getParentComponent() )
+                if( C == Ancestor )
+                    return true;
+            return false;
+        }
+
+        /// Depth-first search of showing components, topmost (last-added) children first.
+        juce::Component* findIn( juce::Component& Root, const std::function<bool( juce::Component& )>& Match )
+        {
+            for( int i = Root.getNumChildComponents(); --i >= 0; )
+            {
+                auto* c = Root.getChildComponent( i );
+                if( c == nullptr || !c->isShowing() )
+                    continue;
+                if( auto* hit = findIn( *c, Match ) )
+                    return hit;
+                if( Match( *c ) )
+                    return c;
+            }
+            return nullptr;
+        }
+
+        juce::String nameOf( const juce::Component& C )
+        {
+            return C.getTitle().isNotEmpty() ? C.getTitle() : C.getName();
+        }
+
+        /// The app's windows, the panel window first.
+        juce::Array<juce::Component*> windows( juce::Component& Panel )
+        {
+            juce::Array<juce::Component*> list;
+            auto*                         main = Panel.getTopLevelComponent();
+            list.add( main );
+            auto& desk = juce::Desktop::getInstance();
+            for( int i = 0; i < desk.getNumComponents(); ++i )
+                if( auto* c = desk.getComponent( i ); c != main && c->isShowing() )
+                    list.add( c );
+            return list;
+        }
+    }
+
+    SimControl::SimControl( juce::Component& Panel, juce::Component& Screen )
+        : panel( Panel ), screen( Screen )
+    {
+        auto path = juce::SystemStats::getEnvironmentVariable( "KICK_SIM_CONTROL", {} );
+        if( path.isEmpty() )
+            return;
+        file    = juce::File::getCurrentWorkingDirectory().getChildFile( path );
+        readPos = file.getSize(); // only lines written after start-up
+        log( "listening on " + file.getFullPathName() );
+        startTimer( 50 );
+    }
+
+    SimControl::~SimControl() { stopTimer(); }
+
+    void SimControl::timerCallback()
+    {
+        if( busy )
+            return;
+
+        if( queue.isEmpty() )
+        {
+            const auto size = file.getSize();
+            if( size < readPos )
+                readPos = 0; // file was truncated
+            if( size == readPos )
+                return;
+            juce::FileInputStream in( file );
+            if( !in.openedOk() )
+                return;
+            in.setPosition( readPos );
+            partial += in.readString();
+            readPos = in.getPosition();
+            while( partial.containsChar( '\n' ) )
+            {
+                queue.add( partial.upToFirstOccurrenceOf( "\n", false, false ).trim() );
+                partial = partial.fromFirstOccurrenceOf( "\n", false, false );
+            }
+        }
+
+        if( !queue.isEmpty() )
+        {
+            auto line = queue[0];
+            queue.remove( 0 );
+            if( line.isNotEmpty() )
+                run( line );
+        }
+    }
+
+    void SimControl::run( const juce::String& Line )
+    {
+        juce::StringArray tok;
+        tok.addTokens( Line, " ", "\"" );
+        tok.trim();
+        tok.removeEmptyStrings();
+        for( auto& t : tok )
+            t = t.unquoted();
+        if( tok.size() < 2 )
+        {
+            log( "error ? malformed line: " + Line );
+            return;
+        }
+        const auto seq = tok[0];
+        const auto cmd = tok[1];
+        tok.removeRange( 0, 2 );
+
+        auto ok   = [seq]() { log( "ok " + seq ); };
+        auto fail = [seq]( const juce::String& Why ) { log( "error " + seq + " " + Why ); };
+
+        if( cmd == "press" || cmd == "click" || cmd == "tap" )
+        {
+            juce::Component*   target = nullptr;
+            juce::Point<float> pos;
+            if( cmd == "press" )
+                target = findPanelControl( tok.joinIntoString( " " ) );
+            else if( cmd == "click" )
+                target = findScreenComponent( tok.joinIntoString( " " ) );
+            else if( tok.size() == 2 )
+            {
+                target = &screen;
+                pos    = { tok[0].getFloatValue(), tok[1].getFloatValue() };
+            }
+            if( target == nullptr )
+                return fail( "no showing component for: " + tok.joinIntoString( " " ) );
+            if( cmd != "tap" )
+                pos = target->getLocalBounds().toFloat().getCentre();
+            auto r = touch( *target, pos, ok );
+            if( r.isNotEmpty() )
+                fail( r );
+            return;
+        }
+
+        if( cmd == "shot" )
+        {
+            auto r = snapshot( juce::File::getCurrentWorkingDirectory().getChildFile( tok.joinIntoString( " " ) ) );
+            return r.isEmpty() ? ok() : fail( r );
+        }
+
+        if( cmd == "list" )
+        {
+            const auto filter = tok.joinIntoString( " " );
+            for( auto* w : windows( panel ) )
+                findIn( *w, [&]( juce::Component& C ) {
+                    const auto n = nameOf( C );
+                    if( n.isNotEmpty() && ( filter.isEmpty() || n.containsIgnoreCase( filter ) ) )
+                        log( "item " + juce::String( typeid( C ).name() ) + "\t" + n + "\t" + C.getScreenBounds().toString()
+                             + ( isInside( &C, &screen ) ? "\tscreen" : ( w == panel.getTopLevelComponent() ? "\tpanel" : "\tpopup" ) ) );
+                    return false;
+                } );
+            return ok();
+        }
+
+        if( cmd == "echo" )
+        {
+            log( "echo " + tok.joinIntoString( " " ) );
+            return ok();
+        }
+
+        fail( "unknown command " + cmd );
+    }
+
+    juce::Component* SimControl::findPanelControl( const juce::String& Name )
+    {
+        return findIn( *panel.getTopLevelComponent(), [&]( juce::Component& C ) {
+            return dynamic_cast<juce::Button*>( &C ) != nullptr && C.getName() == Name && !isInside( &C, &screen );
+        } );
+    }
+
+    juce::Component* SimControl::findScreenComponent( const juce::String& Name )
+    {
+        auto match = [&]( juce::Component& C ) { return nameOf( C ) == Name; };
+        // Popups sit above the screen, so look there first.
+        auto wins = windows( panel );
+        for( int i = wins.size(); --i >= 1; )
+            if( auto* hit = findIn( *wins[i], match ) )
+                return hit;
+        return findIn( screen, match );
+    }
+
+    juce::String SimControl::touch( juce::Component& Target, juce::Point<float> Pos, std::function<void()> Done )
+    {
+        // Events are delivered to the component directly rather than through the window's
+        // ComponentPeer: JUCE's peer dispatch asks macOS whether the window is the topmost one
+        // at that point, which is false while the screen is locked or the window is covered.
+        // Hit-test from the window, like a finger: whatever is on top at that point (an overlay,
+        // a dialog) gets the touch, not necessarily the component that was named.
+        auto* top = Target.getTopLevelComponent();
+        auto* c   = top->getComponentAt( top->getLocalPoint( &Target, Pos ).roundToInt() );
+        if( c == nullptr )
+            c = &Target;
+        const auto touchedPos = c->getLocalPoint( &Target, Pos );
+        log( "touched " + nameOf( *c ) + " (" + typeid( *c ).name() + ")" );
+        if( c->isCurrentlyBlockedByAnotherModalComponent() )
+        {
+            auto* modal = juce::Component::getCurrentlyModalComponent();
+            return "blocked by modal component " + ( modal != nullptr ? nameOf( *modal ) + " (" + typeid( *modal ).name() + ")" : juce::String( "?" ) );
+        }
+
+        busy = true;
+        auto finish = [this, Done]() {
+            busy = false;
+            Done();
+        };
+
+        // Buttons: the same path as a macOS accessibility press (AXPress -> triggerClick), which
+        // flashes the button down and up, so the panel keys send their press packets as usual.
+        auto* button = dynamic_cast<juce::Button*>( c );
+        if( button == nullptr )
+            button = c->findParentComponentOfClass<juce::Button>();
+        if( button != nullptr )
+        {
+            button->triggerClick();
+            juce::Timer::callAfterDelay( 200, finish );
+            return {};
+        }
+
+        // Anything else: mouseDown now, mouseUp 80 ms later, at the touched point.
+        const auto pos  = touchedPos;
+        const auto now  = juce::Time::getCurrentTime();
+        auto       make = [c, pos, now]( juce::ModifierKeys Mods ) {
+            return juce::MouseEvent( juce::Desktop::getInstance().getMainMouseSource(), pos, Mods,
+                                     juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation,
+                                     juce::MouseInputSource::defaultRotation, juce::MouseInputSource::defaultTiltX,
+                                     juce::MouseInputSource::defaultTiltY, c, c, juce::Time::getCurrentTime(), pos, now, 1, false );
+        };
+        c->mouseDown( make( juce::ModifierKeys( juce::ModifierKeys::leftButtonModifier ) ) );
+        juce::Component::SafePointer<juce::Component> safe( c );
+        juce::Timer::callAfterDelay( 80, [safe, make, finish]() {
+            if( safe != nullptr )
+                safe->mouseUp( make( {} ) );
+            finish();
+        } );
+        return {};
+    }
+
+    juce::String SimControl::snapshot( const juce::File& Out )
+    {
+        auto write = [this]( juce::Component& C, const juce::File& F, float Scale ) -> juce::String {
+            auto img = C.createComponentSnapshot( C.getLocalBounds(), true, Scale );
+            F.deleteFile();
+            juce::FileOutputStream os( F );
+            if( !os.openedOk() || !juce::PNGImageFormat().writeImageToStream( img, os ) )
+                return "cannot write " + F.getFullPathName();
+            log( "shot " + F.getFullPathName() + " " + nameOf( C ) + " " + C.getScreenBounds().toString() );
+            return {};
+        };
+        auto sibling = [&Out]( const juce::String& Suffix ) {
+            return Out.getSiblingFile( Out.getFileNameWithoutExtension() + "-" + Suffix + ".png" );
+        };
+
+        // OUT.png: the panel window; OUT-screen.png: the Kick screen at its native 1024x600;
+        // OUT-<n>.png: every other showing window (the app's full-screen popups).
+        auto wins = windows( panel );
+        auto r    = write( *wins[0], Out, 1.0f );
+        if( r.isEmpty() )
+            r = write( screen, sibling( "screen" ), 1.0f );
+        for( int i = 1; i < wins.size() && r.isEmpty(); ++i )
+            r = write( *wins[i], sibling( juce::String( i ) ), 1.0f );
+        return r;
+    }
+} // namespace sim

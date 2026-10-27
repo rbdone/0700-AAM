@@ -146,6 +146,17 @@ Everything a check needs is in `Kick/tools/` and works from any directory:
 | `sim_press.sh NAME...` | Presses controls by printed name (see 4.1). |
 | `sim_shot.sh [--all] OUT.png` | Captures the panel window by window id (`screencapture -l`), so it works while other windows cover it. `--all` also captures the app's popup windows as `OUT-<n>.png`. |
 | `sim_quit.sh` | Stops the simulator and releases the lock. |
+| `sim_click.sh NAME...`, `--at X Y`, `--list [FILTER]` | Touches the **screen** rather than the panel: clicks an on-screen component by its accessibility title (Preferences tabs `Info`, `Hardware`, `CV`, `Ethernet`, `WiFi`; buttons such as `Firmware Update`, `Resources`), or pixel (X,Y) of the 1024x600 Kick screen wherever the window has scaled it; `--list` prints every accessible element with its frame. A real mouse click (CGEvent) through a small Swift helper (`sim_ax.swift`, compiled on first use into `Kick/build/sim_ax`). Needs Accessibility permission and an unlocked, visible window. |
+| `sim_ctl.sh press\|click\|tap\|shot\|list\|echo ...` | The same jobs **from inside the app**, with no accessibility and no window server, so it keeps working while the Mac is locked or asleep or the window is covered. `press NAME` = panel control by printed name (as `sim_press.sh`), `click NAME` = on-screen component by title (as `sim_click.sh`), `tap X Y` = Kick-screen pixel, `shot OUT.png` = renders the panel to `OUT.png`, the Kick screen at its native 1024x600 to `OUT-screen.png` and each popup window to `OUT-<n>.png`, `list [FILTER]` = titled components, `echo TEXT` = marker in the log. Each command waits for the app's acknowledgement (`SimControl: ok <n>`), so a blocked message thread shows up as a timeout and exit status 1. |
+
+`sim_ctl.sh` talks to `apps/kickem/simulator/kick_SimControl.cpp`, which `sim_launch.sh` always
+enables (`KICK_SIM_CONTROL=Kick/build/.sim_ctl`; the log path is kept in `Kick/build/.sim_log`).
+Buttons are pressed with `juce::Button::triggerClick()` (exactly what a macOS accessibility press
+does), other components get `mouseDown` / `mouseUp` at the touched point. Events are delivered
+to the component directly rather than through the window's `ComponentPeer`, because JUCE's peer
+dispatch asks macOS whether the window is the topmost one at that point, which is false while
+the screen is locked. A touch on a component behind a modal dialog is refused with
+`blocked by modal component ...` rather than silently passed through.
 
 Only one `KT_KickEM` can run on a machine (the app refuses a second instance, and the press
 helper and audio device assume one). `sim_launch.sh` therefore holds a machine-wide lock
@@ -158,6 +169,7 @@ Opt-in environment variables, all off by default:
 |---|---|
 | `KICK_SIM_AUDIO_PROBE=<file.wav>` | `mt::AudioDevice` writes the engine's master output to that WAV (32-bit float) and logs `AudioProbe: t=<n>s peak=<x>dBFS rms=<y>dBFS` once per second of audio. Silence logs `-120.0dBFS`. |
 | `KICK_SIM_AUDIO_INPUT=tone`, `tone:<hz>`, `pulse` or `<file>` | `mt::AudioDevice` replaces the device input with a test source: a -12 dBFS sine (1 kHz by default), 50 ms 1 kHz bursts every 500 ms at -6 dBFS, or a looped audio file. Logged as `TestInput: ...`. |
+| `KICK_SIM_CONTROL=<file>` | The simulator polls `<file>` for `sim_ctl.sh` commands (see above). `sim_launch.sh` sets it to `Kick/build/.sim_ctl`; without it nothing is polled. |
 | `KICK_SIM_LOG_SURFACE=1` | The simulated surface logs every packet the app sends it: `SimSurface: LED cmd=0 data=44,1` (type, command, payload). LED commands are `DeviceControlContracts::LedCmd` (0 = set single LED: id, state), pad commands `PadCmd`. |
 
 Input from the panel is always logged by the app as `Data[0] From DCL:<id> cmd From DCL : <cmd>
@@ -182,6 +194,46 @@ bindings:
 | `Esc`, `Insert`, `Delete`, `Tab`, `PgUp`, `PgDn` | MENU, PREF, ERASE, LINK, BACK, COPY |
 | `0 - = P [ ]` | FULL LEVEL, NOTE REPEAT, 16 LEVELS, HALF LEVEL, LATCH, NOTES |
 | Shift | SHIFT |
+
+### 4.5 Hardware-only screens in the simulator
+
+Some screens exist only to drive the unit's own hardware or Linux. In the simulator each now opens,
+shows an explicit **"<feature> - Not available in the simulator"** panel that says what the unit
+does there, and closes normally. The panel (`ui::SimUnavailable`,
+`modules/kick_ui_controls/source/kick_SimUnavailable.h`) swallows touches, so the device controls
+underneath cannot be reached, and logs `SimUnavailable: <feature> shown` / `hidden`. All of it
+is behind `#ifdef SIM_BUILD`; the device build is unchanged.
+
+**How `SIM_BUILD` reaches the modules.** The Kick modules are JUCE modules
+(`juce_add_modules` in `modules/CMakeLists.txt`), i.e. CMake INTERFACE libraries: their `.cpp`
+files are compiled inside each app target that links them, not once into a shared static library.
+`apps/kickem/CMakeLists.txt` defines `SIM_BUILD=1` privately on `KT_KickEM`, so every module is
+compiled with it in the simulator (objects land in `build/apps/kickem/CMakeFiles/KT_KickEM.dir/__/__/modules/...`)
+and without it in `Kick`.
+
+| Screen | How to reach it | Device dependency | Before (observed on macOS) | Simulator behaviour now |
+|---|---|---|---|---|
+| Firmware update | PREFS > Info > Firmware Update | `.swu` image on `/mnt/sdcard` or `/mnt/flash`, PC app over USB FunctionFS (`/dev/usb-utp0`), `swupdate`, `reboot` | Opened, started the image-scan thread, then claimed "You are on latest Version / No updates available" | Notice over the update list; no scan thread, no USB gadget; header arrow and Go Back close it |
+| Wi-Fi | PREFS > WiFi | `wlan0` via `iwlist`, `ip link`, `wpa_supplicant`, `dhclient`, `killall` | DISABLED / ScanWifi / empty list / 0.0.0.0; Scan silently returned nothing; Disconnect would have run `killall -9 wpa_supplicant dhclient` on the host | Notice over the whole tab; `WifiManager` never spawns a command (logs `SimUnavailable: Wi-Fi command not run: ...`) |
+| Ethernet | PREFS > Ethernet | `eth0` via `ifconfig`, `udhcpc`, `ip route`, `/sys/class/net/eth0` | Showed ENABLED / AUTOMATIC and 0.0.0.0 everywhere (off Linux `isInterfaceUp()` returns true) | Notice over the whole tab |
+| CV / Gate | PREFS > CV, and its CV CALIBRATION screen | DAC over I2C (`/dev/i2c-3`, `mt::CV`) | Eight start-note selectors and a calibration screen whose +/-/Reset/Apply silently did nothing | Notice over the whole tab, so calibration cannot be opened |
+| System resources (storage) | Resources button (chip icon) in a screen header, e.g. Preferences | `/proc/stat`, `sysinfo`, `df` on `/home/Kick`, `/mnt/sdcard`, `/mnt/flash` | CPU, RAM, internal memory "0.00 %" from structs that are never filled off Linux; SD / USB rows absent | Notice over the meters; the 1 Hz refresh is skipped; Purge / OK still work |
+| SD card / USB drive in File Browser | BROWSE | Polls `/dev/mmcblk1`, `/dev/sda`; browses `/mnt/sdcard`, `/mnt/flash` | Only Internal / Factory Sample Library / Demos, no hint why | Small notice below the Location rows; the rest of the browser works |
+| Date and time (Hardware tab) | PREFS > Hardware | Sets the system clock | `setDate` / `setTime` passed strings such as `2026-10-27` to `std::system()` on the host | `HwPref::setDate` / `setTime` log `SimUnavailable: system date/time not changed` and return. The rest of the tab (pad threshold, velocity curve, tap tempo) is a normal screen and works |
+| LINK, LINK EDIT | LINK key; SHIFT + SAMPLE EDIT | None. These are the **Q-Link** knob controls, not Ableton Link (there is no Ableton Link code in the repository) | LINK EDIT opens "Q-Link Edit"; LINK (id 47) reaches `KnobEdit::knobLongPress()`, which picks the Q-Link page and starts a timer, with no visible change on the main screen | Unchanged: they are ordinary screens and work |
+| Camera | - | None in software | The camera module is printed on the panel only; nothing in `Kick/` reads a camera | Nothing to stub |
+
+Verified with `sim_ctl.sh` on a locked Mac (see 4.2): each screen was opened, captured, closed,
+then MAIN and Pad 1 were pressed and their packets logged
+(`Data[0] From DCL:8 ... type 1`, `Data[0] From DCL:0 ... type 3`). Touching a covered device
+control (WiFi > ScanWifi, CV > CV CALIBRATION) lands on the notice
+(`SimControl: touched Wi-Fi is not available in the simulator`). Before the change none of these
+screens hung or blocked the UI. The Release build compiles `jassert` out, so none could assert
+either; the problems were false or empty states and host shell commands.
+
+Not covered: the `SWUpdateWindow` progress screen and the CV/Gate program editor
+(`program_edit_ui/sources/cvgate`). The first is reachable only after an image validates. The
+second needs a CV program, and the shipped projects have none.
 
 ## 5. What had to change to make the public release build
 

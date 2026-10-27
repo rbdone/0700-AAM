@@ -58,6 +58,23 @@ namespace kick_ui
 
         explicit SettingsInterface( int NRows, int NCols, bool RowTitlesRequired = false, juce::ValueTree VT = {} )
             : ui::KickGrid( NRows, NCols, RowTitlesRequired ), state( VT ){};
+
+#ifdef SIM_BUILD
+        /// Simulator: a view that only drives device hardware sets this to cover itself with an
+        /// honest "not available in the simulator" panel. KickGrid::resized() re-adds only its
+        /// grid items, so the panel is re-attached on top after every layout.
+        std::unique_ptr<ui::SimUnavailable> simUnavailable;
+
+        void resized() override
+        {
+            ui::KickGrid::resized();
+            if( simUnavailable )
+            {
+                addAndMakeVisible( *simUnavailable );
+                simUnavailable->setBounds( getLocalBounds() );
+            }
+        }
+#endif
     };
 
     class Settings : public kick_ui::IScreen
