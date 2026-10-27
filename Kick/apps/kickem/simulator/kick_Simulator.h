@@ -22,6 +22,13 @@ namespace sim
     /// Sends a control-surface button packet (BTN_PRESSED / BTN_RELEASED) for a BtnLedSequence id.
     void sendButtonPacket( int Id, int BtnState );
 
+    /// The SHIFT key. On the unit the control-surface firmware reports a key pressed while SHIFT is
+    /// held as its secondary function (the caption printed under the key), e.g. SHIFT + MAIN is
+    /// reported as EN_GRID. The simulator does the same.
+    void setShiftHeld( bool Held ); // sends the SHIFT packet and updates the app's shift state
+    bool isShiftHeld();
+    int  shiftedIdFor( int Id ); // secondary function of a key, or Id itself if it has none
+
     //==============================================================================================
     /// Draws juce::Slider rotaries as the unit's knobs.
     class KnobLookAndFeel : public juce::LookAndFeel_V4
@@ -170,6 +177,8 @@ namespace sim
         static constexpr int canvasW = 1240, canvasH = 1250;
 
     private:
+        void loadLogo();
+
         void timerCallback() override;
         void handleFromApp( CPktMgr::HWMsg_t& msg );
         void handlePadMessage( const CPktMgr::HWMsg_t& msg );
@@ -193,6 +202,7 @@ namespace sim
         std::map<int, SurfaceButton*>               buttonsById;
 
         juce::Slider master, rec, slider;
+        juce::Image  logo; // "behringer" mark printed above the screen
         EndlessKnob  qlinks[4]{ EndlessKnob{ KnobLookAndFeel::Style::Encoder }, EndlessKnob{ KnobLookAndFeel::Style::Encoder }, EndlessKnob{ KnobLookAndFeel::Style::Encoder }, EndlessKnob{ KnobLookAndFeel::Style::Encoder } };
         EndlessKnob  jog{ KnobLookAndFeel::Style::Jog, 4.f };
 

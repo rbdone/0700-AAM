@@ -107,16 +107,18 @@ LEDs sent by the app are shown.
 - The window is resizable and keeps the unit's proportions; the whole panel, screen included,
   scales with it. It opens as tall as the display allows.
 - The small printed captions under the keys are the SHIFT functions (GRID, SAVE, PAD MIX, ...,
-  banks E-H). They are clickable and send that function's id directly, so you do not have to hold
-  SHIFT while developing. SHIFT itself is a toggle.
+  banks E-H). On the unit you hold SHIFT and press the key, and the control-surface firmware
+  reports the secondary id (SHIFT + MAIN arrives in the app as `EN_GRID`). The simulator does the
+  same: SHIFT is a toggle, keys pressed while it is on send their secondary id, and clicking a
+  caption performs the whole hold-press-release for you.
 - The jog wheel and P1-P4 are endless encoders, as on the unit: the app only ever receives a
   direction and a step count (`DclContractsHelper::getKnobValue`), never a position. Drag to
   turn; the small PUSH key under the wheel is the wheel's click (ENTER). MASTER and REC are
   analogue pots on the unit and do nothing here.
 - Every pad and key is a `juce::Button` with its printed name, so the panel is scriptable through
-  macOS accessibility: `Kick/tools/sim_press.sh "Pad 1" MAIN PUSH "key 45"` presses controls by
-  name while the simulator runs (transport keys are `key 42`..`key 46`). The terminal needs
-  Accessibility permission in System Settings.
+  macOS accessibility: `Kick/tools/sim_press.sh "Pad 1" MAIN PUSH PLAY GRID` presses controls by
+  name while the simulator runs; a caption name such as GRID is performed as SHIFT + key. The
+  terminal needs Accessibility permission in System Settings.
 - `/goal` in Claude Code (`.claude/commands/goal.md`) is a phased plan for making every control
   behave as on the device, starting with synthesised starter content.
 - Known limitation: the app's full-screen popups (`kick_utils_popup.cpp`) are separate desktop

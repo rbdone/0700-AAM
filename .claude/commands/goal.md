@@ -13,8 +13,14 @@ every change already made to get the app and the simulator running on macOS.
 - `Kick/build/KT_KickEM.app` is a to-scale front panel around the real Kick screen. Every pad,
   key, encoder and the slider already sends the exact `CPktMgr::HWMsg_t` packet the hardware
   sends, and the app's LED / pad-colour packets are shown. Transport of input is **not** the
-  problem: `Kick/tools/sim_press.sh "Pad 1" MAIN PUSH` presses controls by name and the app logs
-  `Data[0] From DCL:...` for each one.
+  problem: `Kick/tools/sim_press.sh "Pad 1" MAIN PUSH PLAY GRID` presses controls by name and the
+  app logs `Data[0] From DCL:...` for each one.
+- A caption printed under a key is that key's **SHIFT function**: on the unit you hold SHIFT and
+  press the key, and the control-surface firmware reports the secondary id (SHIFT + MAIN arrives
+  as `EN_GRID`). The simulator reproduces this: the SHIFT key is a toggle, keys pressed while it
+  is on send their secondary id, and clicking a caption performs the whole hold-press-release.
+  `sim_press.sh GRID` does the same combo. The app also tracks the SHIFT state itself
+  (`DclContractsHelper::isShiftPressed`) for modifier behaviour in grids and pad groups.
 - The app is a hollow shell on this branch because the public release stripped all content:
   the demo and template projects are empty `<ROOT>` documents with no programs, sequences or
   samples; the factory samples, metronome sounds and the General MIDI SoundFont are gone; the
@@ -41,7 +47,8 @@ script proves it:
    top, STOP stops, RECORD and OVERDUB arm and capture pad hits into the current sequence, the
    bar:beat:tick display runs, TAP TEMPO sets tempo, and the metronome clicks when enabled.
 3. **Every panel control does its device job.** Each function key opens its mode, each SHIFT
-   function (the captions under the keys) does its secondary job, bank keys switch pad banks and
+   function (SHIFT held plus the key under whose caption it is printed) does its secondary job,
+   bank keys (and SHIFT + bank for E-H) switch pad banks and
    the pad colours follow, P1-P4 edit the parameters the current screen assigns to them, the jog
    wheel scrolls and PUSH selects, + / - step values, BACK / COPY / ERASE / FULL LEVEL /
    16 LEVELS / NOTE REPEAT / LATCH / NOTES behave as their names say, and the slider controls
@@ -119,7 +126,7 @@ with the probe from "How to work".
 
 ### Phase 5: every remaining control
 
-Go through `docs/SIMULATOR_STATUS.md` and close each remaining gap: SHIFT functions, Q-Link
+Go through `docs/SIMULATOR_STATUS.md` and close each remaining gap: SHIFT + key functions, Q-Link
 assignments per screen, jog navigation in lists and grids, + / -, BACK, COPY, ERASE, FULL and
 HALF LEVEL, 16 LEVELS, NOTE REPEAT, LATCH, NOTES, PAD MIX / PAD MUTE / TRACK MIX / TRACK MUTE,
 NEXT SEQ, FX, GRID, SAVE, MENU / PREFS, the slider. Where a screen is unreachable or broken

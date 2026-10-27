@@ -16,6 +16,7 @@
  */
 
 #include "kick_Simulator.h"
+#include <contracts/dcl/dcl_contracts_helper.h>
 
 namespace sim
 {
@@ -51,6 +52,49 @@ namespace sim
     void sendButtonPacket( int Id, int BtnState )
     {
         SimulatorHub::get().sendToApp( makeMsg( CPktMgr::EN_PKT_TYPE_BUTTON, DCC::EN_BTN_STATUS, { Id, BtnState, velocityDefault, aftertouch } ) );
+    }
+
+    namespace
+    {
+        std::atomic<bool> shiftHeld{ false };
+
+        // Key -> its SHIFT function, as printed under the keys of the unit.
+        const std::map<int, int> shiftMap = {
+            { DCC::EN_MAINMODE, DCC::EN_GRID },
+            { DCC::EN_BROWSE, DCC::EN_SAVE },
+            { DCC::EN_TRACK_MIX, DCC::EN_PAD_MIX },
+            { DCC::EN_TRACK_MUTE, DCC::EN_PAD_MUTE },
+            { DCC::EN_NEXT_SEQ, DCC::EN_FX },
+            { DCC::EN_TAP_TEMPO, DCC::EN_MASTER },
+            { DCC::EN_NOTE_REPEAT, DCC::EN_LATCH },
+            { DCC::EN_MENU, DCC::EN_PREF },
+            { DCC::EN_STEP_SEQ, DCC::EN_AUTOMATION },
+            { DCC::EN_TC, DCC::EN_ON_OFF },
+            { DCC::EN_SAMPLER, DCC::EN_LOOPER },
+            { DCC::EN_SAMPLE_EDIT, DCC::EN_LINK_EDIT },
+            { DCC::EN_PROG_EDIT, DCC::EN_MIDI_CONTROL },
+            { DCC::EN_FULL_LEVEL, DCC::EN_HALF_LEVEL },
+            { DCC::EN_16LEVELS, DCC::EN_NOTES },
+            { DCC::EN_BANK_A, DCC::EN_BANK_E },
+            { DCC::EN_BANK_B, DCC::EN_BANK_F },
+            { DCC::EN_BANK_C, DCC::EN_BANK_G },
+            { DCC::EN_BANK_D, DCC::EN_BANK_H },
+        };
+    } // namespace
+
+    void setShiftHeld( bool Held )
+    {
+        shiftHeld.store( Held );
+        contracts::shiftBtnState.store( Held ); // what the keyboard detector does on desktop builds
+        sendButtonPacket( DCC::EN_SHIFT, Held ? DCC::BTN_PRESSED : DCC::BTN_RELEASED );
+    }
+
+    bool isShiftHeld() { return shiftHeld.load(); }
+
+    int shiftedIdFor( int Id )
+    {
+        auto it = shiftMap.find( Id );
+        return it == shiftMap.end() ? Id : it->second;
     }
 
     //==============================================================================================
@@ -281,14 +325,15 @@ namespace sim
         // The unit reports keys on press, not on release. Following the down state means the
         // mouse and accessibility clicks (triggerClick) behave the same.
         const bool down = isDown();
-        if( down && !wasDown && !toggle ) sendButtonPacket( id, DCC::BTN_PRESSED );
+        if( down && !wasDown && !toggle ) sendButtonPacket( isShiftHeld() ? shiftedIdFor( id ) : id, DCC::BTN_PRESSED );
         wasDown = down;
     }
 
     void SurfaceButton::clicked()
     {
-        // Toggle keys (SHIFT) report their new state; also the path taken by accessibility clicks.
-        if( toggle ) sendButtonPacket( id, getToggleState() ? DCC::BTN_PRESSED : DCC::BTN_RELEASED );
+        // SHIFT is a toggle here (the unit's is momentary): while it is on, keys send their
+        // secondary function. Also the path taken by accessibility clicks.
+        if( toggle ) setShiftHeld( getToggleState() );
     }
 
     void SurfaceButton::drawIcon( juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c ) const
@@ -410,13 +455,21 @@ namespace sim
 
     void Caption::clicked()
     {
-        if( id >= 0 ) sendButtonPacket( id, DCC::BTN_PRESSED );
+        // A printed caption is "SHIFT + key": hold SHIFT, press the key (which the surface
+        // reports as the secondary function), release SHIFT. The on-screen SHIFT toggle is left
+        // as it was.
+        if( id < 0 ) return;
+        const bool wasHeld = isShiftHeld();
+        if( !wasHeld ) setShiftHeld( true );
+        sendButtonPacket( id, DCC::BTN_PRESSED );
+        if( !wasHeld ) setShiftHeld( false );
     }
 
     //==============================================================================================
     Simulator::Simulator()
     {
         setOpaque( true );
+        loadLogo();
 
         // The real device screen, scaled into the bezel cut-out (see resized()).
         addAndMakeVisible( kick_ui::KickHome::Instance() );
@@ -542,6 +595,30 @@ namespace sim
         removeChildComponent( &home );
         for( auto* s : { &master, &rec } )
             s->setLookAndFeel( nullptr );
+    }
+
+    void Simulator::loadLogo()
+    {
+        // The artwork is dark on white; turn darkness into alpha so it prints in panel grey on the
+        // black bezel, then crop to the mark.
+        auto src = juce::ImageCache::getFromFile( ui::Theme::getAsset( "Sim Behringer Logo.png" ) );
+        if( !src.isValid() ) return;
+
+        juce::Image out( juce::Image::ARGB, src.getWidth(), src.getHeight(), true );
+        juce::Rectangle<int> box;
+        {
+            juce::Image::BitmapData in( src, juce::Image::BitmapData::readOnly );
+            juce::Image::BitmapData o( out, juce::Image::BitmapData::writeOnly );
+            for( int y = 0; y < src.getHeight(); ++y )
+                for( int x = 0; x < src.getWidth(); ++x )
+                {
+                    const auto p = in.getPixelColour( x, y );
+                    const auto a = juce::jlimit( 0.f, 1.f, ( 1.f - p.getBrightness() ) * p.getFloatAlpha() * 1.15f );
+                    o.setPixelColour( x, y, print.withAlpha( a ) );
+                    if( a > 0.05f ) box = box.isEmpty() ? juce::Rectangle<int>( x, y, 1, 1 ) : box.getUnion( { x, y, 1, 1 } );
+                }
+        }
+        logo = box.isEmpty() ? out : out.getClippedImage( box.expanded( 2 ) );
     }
 
     SurfaceButton& Simulator::addButton( const juce::String& Caption, int Id, juce::Colour Led, bool Toggle, SurfaceButton::Shape S, SurfaceButton::Icon I )
@@ -677,9 +754,18 @@ namespace sim
         g.fillRoundedRectangle( bezelRect.expanded( 2.f ), 10.f );
         g.setColour( bezel );
         g.fillRoundedRectangle( bezelRect, 8.f );
+        if( logo.isValid() )
+        {
+            const float h = 30.f, w = h * (float)logo.getWidth() / (float)logo.getHeight();
+            g.drawImage( logo, juce::Rectangle<float>( w, h ).withCentre( { bezelRect.getCentreX(), bezelRect.getY() + 32.f } ), juce::RectanglePlacement::centred );
+        }
+        else
+        {
+            g.setColour( print );
+            g.setFont( panelFont( 22.f, false ).italicised() );
+            g.drawText( "behringer", bezelRect.withHeight( 60.f ), juce::Justification::centred );
+        }
         g.setColour( print );
-        g.setFont( panelFont( 22.f, false ).italicised() );
-        g.drawText( "behringer", bezelRect.withHeight( 60.f ), juce::Justification::centred );
         g.setFont( panelFont( 20.f ) );
         g.drawText( "KICK", bezelRect.withTop( bezelRect.getBottom() - 38.f ), juce::Justification::centred );
 
