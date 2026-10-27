@@ -188,6 +188,10 @@ namespace mt
 #if defined( SIM_BUILD ) || JUCE_MAC
         resolveRelativeSamplePaths( vTree, juce::File( projectManager::getProjectDir() ) );
 #endif
+#ifdef SIM_BUILD
+        // Scripts (tools/sim_smoke.sh) assert which project the simulator loaded.
+        juce::Logger::writeToLog( "SimProject: loaded " + ProjectFile.getFullPathName() );
+#endif
 
 #if defined( USE_VALUE_TREE_DEBUGGER ) && ( USE_VALUE_TREE_DEBUGGER > 0 )
         debugger.setSource( vTree );
