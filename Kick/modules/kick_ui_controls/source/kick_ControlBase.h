@@ -26,6 +26,20 @@
 
 namespace ui
 {
+#ifdef SIM_BUILD
+    /// Simulator only. A touched control receives the jog wheel, + / -, PUSH and the slider
+    /// through JUCE keyboard focus (getComponentInFocus below), and JUCE grants keyboard focus
+    /// only while the window is the key window. Scripted touches (Kick/tools/sim_ctl.sh) also run
+    /// with the screen locked or the window in the background, so the simulator remembers the
+    /// component that asked for focus and uses it while JUCE has no focused component at all.
+    /// The device build has one full-screen window that always has focus and does not compile this.
+    inline juce::Component::SafePointer<juce::Component>& simFocusTarget()
+    {
+        static juce::Component::SafePointer<juce::Component> target;
+        return target;
+    }
+#endif
+
     struct KickControlsProcessor
     {
         virtual ~KickControlsProcessor() = default;
@@ -136,7 +150,14 @@ namespace ui
         }
 
         // Class Methods...
+#ifdef SIM_BUILD
+        inline bool hasSelectionFocus() const
+        {
+            return ComponentType::hasKeyboardFocus() || ( juce::Component::getCurrentlyFocusedComponent() == nullptr && simFocusTarget().getComponent() == static_cast<const juce::Component*>( this ) );
+        }
+#else
         inline bool hasSelectionFocus() const { return ComponentType::hasKeyboardFocus(); }
+#endif
         inline void setSelectionEnabled( bool enabled ) noexcept { ComponentType::setWantsKeyboardFocus( enabled ); }
         inline bool isSelectionEnabled() const noexcept { return ComponentType::getWantsKeyboardFocus(); }
 
@@ -146,16 +167,30 @@ namespace ui
                 ComponentType::grabKeyboardFocus();
             else
                 ComponentType::giveAwayKeyboardFocus();
+#ifdef SIM_BUILD
+            if( focus && ComponentType::isShowing() )
+                simFocusTarget() = static_cast<juce::Component*>( this );
+            else if( simFocusTarget().getComponent() == static_cast<juce::Component*>( this ) )
+                simFocusTarget() = nullptr;
+#endif
         }
     };
 
     static inline KickControlsProcessor* getComponentInFocus()
     {
+#ifdef SIM_BUILD
+        if( juce::Component::getCurrentlyFocusedComponent() == nullptr )
+            if( auto* c = simFocusTarget().getComponent(); c != nullptr && c->isShowing() )
+                return dynamic_cast<KickControlsProcessor*>( c );
+#endif
         return dynamic_cast<KickControlsProcessor*>( juce::Component::getCurrentlyFocusedComponent() );
     };
 
     static inline void clearFocusComponent()
     {
         juce::Component::unfocusAllComponents();
+#ifdef SIM_BUILD
+        simFocusTarget() = nullptr;
+#endif
     }
 }

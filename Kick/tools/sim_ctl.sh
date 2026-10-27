@@ -5,6 +5,9 @@
 #                                           # PUSH, PLAY/STOP/RECORD/OVERDUB/PLAYSTART or "key 45";
 #                                           # a caption such as GRID or PREFS
 #                                           # performs that SHIFT function)
+#   Kick/tools/sim_ctl.sh down NAME [VEL]   # press a pad or key and keep it held (pads: velocity 1..127)
+#   Kick/tools/sim_ctl.sh up NAME           # release it
+#   Kick/tools/sim_ctl.sh hold NAME SECS [VEL]  # down, wait SECS, up (answers after the release)
 #   Kick/tools/sim_ctl.sh click NAME...     # on-screen components by title ("WiFi", "Resources")
 #   Kick/tools/sim_ctl.sh tap X Y           # touch pixel (X,Y) of the 1024x600 Kick screen
 #   Kick/tools/sim_ctl.sh turn KNOB STEPS   # encoder P1..P4 or JOG, signed detents (one packet each)
@@ -64,6 +67,11 @@ CMD=$1; shift || true
 case "$CMD" in
     press)
         for NAME in "$@"; do send "press $(q "$(key_name "$NAME")")"; sleep 0.2; done ;;
+    down) send "down $(q "$(key_name "$1")") ${2:-}" ;;
+    up)   send "up $(q "$(key_name "$1")")" ;;
+    hold)
+        TIMEOUT=$(( TIMEOUT + ${2%.*} + 1 ))
+        send "hold $(q "$(key_name "$1")") $2 ${3:-}" ;;
     click)
         for NAME in "$@"; do send "click $(q "$NAME")"; sleep 0.2; done ;;
     tap)  send "tap $1 $2" ;;
@@ -75,5 +83,5 @@ case "$CMD" in
         printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: shot \([^ ]*\).*/\1/p' ;;
     list) send "list $(q "$*")"; printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: item //p' ;;
     echo) send "echo $*" ;;
-    *) sed -n '2,20p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,23p' "$0" >&2; exit 2 ;;
 esac

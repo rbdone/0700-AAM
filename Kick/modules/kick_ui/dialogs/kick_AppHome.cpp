@@ -195,6 +195,11 @@ namespace kick_ui
         addKeyListener( &contracts::getKeypressDetector() );
         // LED control
         ledControl_ = std::make_unique<KickLEDs>();
+        // FULL / HALF LEVEL, 16 LEVELS, NOTE REPEAT / LATCH and ERASE + pad (kick_PadModifiers.h).
+        padModifiers_ = std::make_unique<PadModifiers>( [this]( CPktMgr::HWMsg_t& Msg ) {
+            if( auto* scr = getScreen( getCurrentScreen() ); scr && scr->requiresHandleCommand() )
+                scr->handleCommand( Msg );
+        } );
 
         // Setup size and other application options.
         setInterceptsMouseClicks( false, true );
@@ -332,6 +337,33 @@ namespace kick_ui
         dynamic_cast<AppAssignSample*>( screens_[Screen::MenuAssignSample].get() )->startup();
     }
 
+    void KickHome::goBack()
+    {
+        // BACK does what the back arrow in the current screen's header does (most screens:
+        // return to the screen they were opened from; GRID, STEP SEQ, FX: return to MAIN).
+        // Screens without one (MAIN, the Projects screen) stay.
+        auto* scr = dynamic_cast<juce::Component*>( getScreen( getCurrentScreen() ) );
+        if( scr == nullptr || !scr->isShowing() )
+            return;
+        std::function<KickModeHeader*( juce::Component& )> findHeader = [&]( juce::Component& C ) -> KickModeHeader* {
+            for( auto* child : C.getChildren() )
+            {
+                if( !child->isVisible() )
+                    continue;
+                if( auto* h = dynamic_cast<KickModeHeader*>( child ); h && h->onBackButtonPressed )
+                    return h;
+                if( auto* h = findHeader( *child ) )
+                    return h;
+            }
+            return nullptr;
+        };
+        if( auto* header = findHeader( *scr ) )
+        {
+            juce::Logger::writeToLog( "BACK: header back of screen " + juce::String( (int)getCurrentScreen() ) );
+            header->onBackButtonPressed( true );
+        }
+    }
+
     void KickHome::handleCommand( CPktMgr::HWMsg_t& f_HwMsg )
     {
         auto&        ae        = mt::getAudioInterface();
@@ -378,6 +410,8 @@ namespace kick_ui
         {
             log += " In Recent Prj";
             juce::Logger::writeToLog( log );
+            if( getCurrentScreen() != Screen::MenuMidiControl && padModifiers_ && padModifiers_->handle( f_HwMsg, getCurrentScreen() ) )
+                return;
             if( contracts::DclContractsHelper::isButtonMessage( f_HwMsg ) && ( contracts::DclContractsHelper::getButtonState( f_HwMsg ) == contracts::DeviceControlContracts::BTN_PRESSED ) )
             {
                 log += " In is button";
@@ -415,15 +449,9 @@ namespace kick_ui
                         case contracts::DeviceControlContracts::EN_BANK_F: ae.setBank( "F" ); break;
                         case contracts::DeviceControlContracts::EN_BANK_G: ae.setBank( "G" ); break;
                         case contracts::DeviceControlContracts::EN_BANK_H: ae.setBank( "H" ); break;
-                        case contracts::DeviceControlContracts::EN_HALF_LEVEL:
+                        // FULL LEVEL, HALF LEVEL, 16 LEVELS, NOTE REPEAT and LATCH: padModifiers_ above.
 
-                            contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_HALF_LEVEL ) );
-                            contracts::DclContractsHelper::setHalfLevel( true );
-                            break;
-                        case contracts::DeviceControlContracts::EN_FULL_LEVEL:
-                            contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_FULL_LEVEL ) );
-                            contracts::DclContractsHelper::setHalfLevel( false );
-                            break;
+                        case contracts::DeviceControlContracts::EN_BACK: goBack(); break;
 
                         case contracts::DeviceControlContracts::EN_LINK:
                             dynamic_cast<KnobEdit*>( screens_[Screen::MenuKnobEdit].get() )->knobLongPress();
