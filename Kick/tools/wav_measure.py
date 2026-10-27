@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""wav_measure.py FILE [--onsets] [--from S] [--to S] [--thr DB]
+"""wav_measure.py FILE [--onsets [--freqs]] [--channels] [--from S] [--to S] [--thr DB]
 
 Reads a PCM16/24/32 or float32 WAV (no scipy), prints length, peak, RMS, and optionally
 the onset times of bursts (first sample whose |x| crosses the threshold after >= 20 ms
@@ -60,6 +60,9 @@ def main():
         nz = np.nonzero(mono > thr)[0]
         if len(nz):
             print(f'  above {db(thr):.0f} dBFS from {t0 + nz[0] / sr:.4f}s to {t0 + nz[-1] / sr:.4f}s')
+        if '--channels' in a:
+            for c in range(seg.shape[1]):
+                print(f'  ch{c}: peak {db(np.max(np.abs(seg[:, c]))):.2f} dBFS, rms {db(np.sqrt(np.mean(seg[:, c] ** 2))):.2f} dBFS')
     if '--onsets' in a:
         quiet = int(0.02 * sr)
         on, last = [], -10 ** 9
@@ -72,6 +75,23 @@ def main():
         if len(on) > 1:
             d = np.diff(on)
             print('  intervals (s): ' + ' '.join(f'{v:.4f}' for v in d))
+        if '--freqs' in a and on:
+            # Dominant frequency of the 40 ms after each onset (Hann window, zero-padded FFT).
+            fs = []
+            for t in on:
+                i = int((t - t0) * sr)
+                w = seg[i:i + int(0.04 * sr)].mean(axis=1)
+                if len(w) < 64:
+                    fs.append(0.0)
+                    continue
+                spec = np.abs(np.fft.rfft(w * np.hanning(len(w)), 8192))
+                fs.append(np.argmax(spec) * sr / 8192)
+            print('  onset freqs (Hz): ' + ' '.join(f'{f:.0f}' for f in fs))
+            pk = []
+            for t in on:
+                i = int((t - t0) * sr)
+                pk.append(db(np.max(np.abs(seg[i:i + int(0.04 * sr)]))))
+            print('  onset peaks (dBFS): ' + ' '.join(f'{p:.1f}' for p in pk))
 
 
 main()

@@ -37,6 +37,42 @@ namespace kick_ui
 
     sigslot::signal<Screen, void*> signals::onScreenData = {};
 
+    namespace
+    {
+        // TAP TEMPO: the tempo of the last taps (up to four, i.e. three intervals) becomes the
+        // selected sequence's tempo (the master tempo when the sequence follows it). A pause longer
+        // than one beat at BPM::MIN starts a new count.
+        void tapTempo( mt::MTAudioInterface& ae )
+        {
+            static juce::Array<double> taps;
+            const auto                 now = juce::Time::getMillisecondCounterHiRes();
+            if( !taps.isEmpty() && ( now - taps.getLast() ) > ( 60000.0 / BPM::MIN ) )
+                taps.clearQuick();
+            taps.add( now );
+            while( taps.size() > 4 )
+                taps.remove( 0 );
+            if( taps.size() < 2 )
+                return;
+
+            const auto interval = ( taps.getLast() - taps.getFirst() ) / (double)( taps.size() - 1 );
+            const auto bpm      = juce::jlimit( (int)BPM::MIN, (int)BPM::MAX, juce::roundToInt( 60000.0 / interval ) );
+            ae.setSequenceBPM( ae.getSelectedSequence(), bpm );
+            juce::Logger::writeToLog( "TapTempo: " + juce::String( taps.size() ) + " taps, " + juce::String( interval, 1 ) + " ms apart -> " + juce::String( bpm ) + " BPM" );
+        }
+
+        // RECORD / OVERDUB key LEDs follow the armed record mode.
+        void showRecordLeds( mt::MTAudioInterface& ae )
+        {
+            const bool armed   = ae.isSequenceRecordArmed();
+            const bool overdub = ae.isSequenceRecordOverdub();
+            auto       led     = []( int Id, bool On ) {
+                contracts::DclSignals::sendCommandToDcl( On ? contracts::DclContractsHelper::setLEDONMessage( Id ) : contracts::DclContractsHelper::setLEDOFFMessage( Id ) );
+            };
+            led( contracts::DeviceControlContracts::EN_RECORD, armed && !overdub );
+            led( contracts::DeviceControlContracts::EN_OVERDUB, armed && overdub );
+        }
+    }
+
     class TempScreen
         : public IScreen
         , public juce::Component
@@ -173,6 +209,9 @@ namespace kick_ui
         contracts::DclSignals::hardwareInputTriggered.connect( [&]( CPktMgr::HWMsg_t& f_HwMsg ) {
             this->handleCommand( f_HwMsg );
         } );
+
+        // RECORD / OVERDUB takes snap note starts with Timing Correct (TC, ON/OFF) when it is on.
+        mt::getAudioInterface().setRecordTimingCorrect( []( int Tick ) { return TimingCorrect::correct( Tick ); } );
 
         // Function to add screens.
         auto screenAdder = [&]( Screen Type, std::unique_ptr<IScreen> Screen ) {
@@ -477,6 +516,25 @@ namespace kick_ui
                             break;
                         case contracts::DeviceControlContracts::EN_SAVE:
                             ae.saveProject();
+                            break;
+
+                        // Transport keys with no per-screen handler (PLAY / STOP / PLAY START are
+                        // handled by each screen; the LOOPER uses RECORD / OVERDUB for itself).
+                        case contracts::DeviceControlContracts::EN_TAP_TEMPO: tapTempo( ae ); break;
+                        case contracts::DeviceControlContracts::EN_RECORD:
+                        case contracts::DeviceControlContracts::EN_OVERDUB:
+                            if( getCurrentScreen() != Screen::MenuLooper )
+                            {
+                                ae.setSequenceRecord( true, buttonCode == contracts::DeviceControlContracts::EN_OVERDUB );
+                                showRecordLeds( ae );
+                            }
+                            break;
+                        case contracts::DeviceControlContracts::EN_STOP: // ends a take; also disarms while stopped
+                            if( ae.isSequenceRecordArmed() )
+                            {
+                                ae.setSequenceRecord( false, false );
+                                showRecordLeds( ae );
+                            }
                             break;
 
                         // TC, ON/OFF (SHIFT + TC) and MASTER (SHIFT + TAP TEMPO) had no handler.

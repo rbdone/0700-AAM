@@ -128,7 +128,7 @@ namespace sim
         auto ok   = [seq]() { log( "ok " + seq ); };
         auto fail = [seq]( const juce::String& Why ) { log( "error " + seq + " " + Why ); };
 
-        if( cmd == "press" || cmd == "click" || cmd == "tap" )
+        if( cmd == "press" || cmd == "click" || cmd == "tap" || cmd == "clickat" )
         {
             juce::Component*   target = nullptr;
             juce::Point<float> pos;
@@ -136,6 +136,21 @@ namespace sim
                 target = findPanelControl( tok.joinIntoString( " " ) );
             else if( cmd == "click" )
                 target = findScreenComponent( tok.joinIntoString( " " ) );
+            else if( cmd == "clickat" && tok.size() >= 3 )
+            {
+                // clickat <title> <fx> <fy>: a touch at that fraction of the component's size, for
+                // controls with untitled parts (the On half of an Off / On toggle).
+                const auto fx = tok[tok.size() - 2].getFloatValue(), fy = tok[tok.size() - 1].getFloatValue();
+                target        = findScreenComponent( juce::StringArray( tok.begin(), tok.size() - 2 ).joinIntoString( " " ) );
+                if( target != nullptr )
+                {
+                    pos = { fx * (float)target->getWidth(), fy * (float)target->getHeight() };
+                    auto r = touch( *target, pos, ok );
+                    if( r.isNotEmpty() )
+                        fail( r );
+                    return;
+                }
+            }
             else if( tok.size() == 2 )
             {
                 target = &screen;
@@ -236,6 +251,45 @@ namespace sim
             return fail( "usage: turn P1..P4|JOG <steps> | slider <0..100>" );
         }
 
+        if( cmd == "repeat" )
+        {
+            // repeat <ms> <count> <control>: presses a panel control <count> times, <ms> apart, on
+            // an absolute schedule (no drift), e.g. TAP TEMPO at a known tempo. Acknowledged after
+            // the last press; each press is logged with its time.
+            const int  ms    = tok[0].getIntValue();
+            const int  count = tok[1].getIntValue();
+            const auto name  = juce::StringArray( tok.begin() + juce::jmin( 2, tok.size() ), juce::jmax( 0, tok.size() - 2 ) ).joinIntoString( " " );
+            auto*      btn   = dynamic_cast<juce::Button*>( findPanelControl( name ) );
+            if( tok.size() < 3 || ms <= 0 || count <= 0 || btn == nullptr )
+                return fail( "usage: repeat <ms> <count> <panel control> (no control '" + name + "')" );
+
+            busy             = true;
+            const auto start = juce::Time::getMillisecondCounterHiRes();
+            juce::Component::SafePointer<juce::Button> safe( btn );
+            auto step = std::make_shared<std::function<void( int )>>();
+            *step     = [this, safe, start, ms, count, name, ok, weak = std::weak_ptr<std::function<void( int )>>( step )]( int k ) {
+                if( safe != nullptr )
+                    safe->triggerClick();
+                log( "repeat " + name + " " + juce::String( k + 1 ) + "/" + juce::String( count ) + " at " + juce::String( juce::Time::getMillisecondCounterHiRes() - start, 1 ) + " ms" );
+                if( k + 1 >= count )
+                {
+                    juce::Timer::callAfterDelay( 200, [this, ok]() { busy = false; ok(); } );
+                    return;
+                }
+                const auto wait = juce::roundToInt( start + ( k + 1 ) * (double)ms - juce::Time::getMillisecondCounterHiRes() );
+                if( auto next = weak.lock() )
+                    juce::Timer::callAfterDelay( juce::jmax( 0, wait ), [next, k]() { ( *next )( k + 1 ); } );
+            };
+            ( *step )( 0 );
+            return;
+        }
+
+        if( cmd == "status" )
+        {
+            log( "status " + ( statusProvider ? statusProvider() : juce::String( "?" ) ) );
+            return ok();
+        }
+
         if( cmd == "echo" )
         {
             log( "echo " + tok.joinIntoString( " " ) );
@@ -266,7 +320,11 @@ namespace sim
         for( int i = wins.size(); --i >= 1; )
             if( auto* hit = findIn( *wins[i], match ) )
                 return hit;
-        return findIn( screen, match );
+        if( auto* hit = findIn( screen, match ) )
+            return hit;
+        // Dialogs shown inside the panel window, over the screen but not children of it (the
+        // METRONOME dialog): the rest of the window, which also holds the panel's own buttons.
+        return findIn( *panel.getTopLevelComponent(), match );
     }
 
     juce::String SimControl::touch( juce::Component& Target, juce::Point<float> Pos, std::function<void()> Done )

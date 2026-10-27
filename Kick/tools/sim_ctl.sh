@@ -10,10 +10,14 @@
 #   Kick/tools/sim_ctl.sh hold NAME SECS [VEL]  # down, wait SECS, up (answers after the release)
 #   Kick/tools/sim_ctl.sh click NAME...     # on-screen components by title ("WiFi", "Resources")
 #   Kick/tools/sim_ctl.sh tap X Y           # touch pixel (X,Y) of the 1024x600 Kick screen
+#   Kick/tools/sim_ctl.sh clickat NAME FX FY  # touch a titled component at a fraction of its size
+#                                           # (e.g. clickat ENABLE 0.75 0.6 = the On half)
 #   Kick/tools/sim_ctl.sh turn KNOB STEPS   # encoder P1..P4 or JOG, signed detents (one packet each)
 #   Kick/tools/sim_ctl.sh slider VALUE      # the slider, 0..100
 #   Kick/tools/sim_ctl.sh shot OUT.png      # render the panel (and popups as OUT-<n>.png)
 #   Kick/tools/sim_ctl.sh list [FILTER]     # titled components, printed from the app log
+#   Kick/tools/sim_ctl.sh repeat MS N NAME  # press a panel control N times, MS ms apart (timed in the app)
+#   Kick/tools/sim_ctl.sh status            # transport state, BAR:BEAT:TICK, tempo, record mode
 #   Kick/tools/sim_ctl.sh echo TEXT         # write a marker line into the app log
 #
 # This works while the Mac's screen is locked, asleep or the window is covered, which
@@ -75,6 +79,7 @@ case "$CMD" in
     click)
         for NAME in "$@"; do send "click $(q "$NAME")"; sleep 0.2; done ;;
     tap)  send "tap $1 $2" ;;
+    clickat) send "clickat $(q "$1") $2 $3" ;;
     turn) send "turn $1 $2" ;;
     slider) send "slider $1" ;;
     shot)
@@ -82,6 +87,12 @@ case "$CMD" in
         send "shot $(q "$OUT")"
         printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: shot \([^ ]*\).*/\1/p' ;;
     list) send "list $(q "$*")"; printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: item //p' ;;
+    repeat)   # repeat MS COUNT NAME: COUNT presses of NAME, MS apart, timed inside the app
+        MS=$1; N=$2; shift 2
+        TIMEOUT=$(( TIMEOUT + MS * N / 1000 + 1 ))
+        send "repeat $MS $N $(q "$(key_name "$*")")"
+        printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: repeat //p' ;;
+    status) send "status"; printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: status //p' ;;
     echo) send "echo $*" ;;
-    *) sed -n '2,23p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,27p' "$0" >&2; exit 2 ;;
 esac

@@ -77,6 +77,10 @@ namespace mt
         // Connect handler to length change handler.
         lengthChangeHandler();
         progChangeHandler();
+
+        // The level of a loaded track: valueTreePropertyChanged only sees later edits, so without
+        // this a saved track level was ignored (velocity x 1.0) until the level was touched.
+        levelScaler = ( level.get() * MIDI::SCALER );
     }
 
     void MTTrack::setName( const juce::String& Name )
@@ -199,6 +203,7 @@ namespace mt
         prevTick              = 0;
         tickCtr               = 0;
         tickPos               = 0;
+        playFromStart         = true;
     }
 
     void MTTrack::resume()
@@ -286,13 +291,25 @@ namespace mt
     {
         //juce::Logger::writeToLog( "prevTick, " + juce::String( PrevTick ) + "PresentTick, " + juce::String(tick));
         juce::HashMap<int, MTNote*>* map = nullptr;
-        for( auto pos = PrevTick + 1; pos <= tick; pos++ )
+        // The clock's first tick after play() is 1 or more, never 0: include the starting position,
+        // or the notes on the first downbeat are skipped until the sequence loops.
+        auto first = PrevTick + 1;
+        if( playFromStart )
+        {
+            playFromStart = false;
+            first         = PrevTick;
+        }
+        for( auto pos = first; pos <= tick; pos++ )
         {
             int posOnTrack = pos % lengthInTicks.load();
             map            = getNotesAtPos( posOnTrack );
             if( !map ) continue;
             for( const auto& it : *map )
             {
+                // RECORD take: the notes from before the punch-in are being replaced.
+                if( replacing.load() && it->id.get() <= takeLastOldId.load() )
+                    continue;
+
                 int noteNo = getEffectiveNoteNo( it->number.get() );
                 if( !isTrackEffectivelyMuted() && CommonUtils::isValidMidiNote( noteNo ) )
                 {
@@ -304,6 +321,12 @@ namespace mt
 
                         // Trigger note now.
                         midiMsgs.insert( -1, juce::MidiMessage::noteOn( MidiChannel, noteNo, (juce::uint8)noteVelocity ) );
+#ifdef SIM_BUILD
+                        // Simulator tooling: KICK_SIM_LOG_NOTES=1 logs every note the sequencer plays.
+                        static const bool logNotes = juce::SystemStats::getEnvironmentVariable( "KICK_SIM_LOG_NOTES", {} ).isNotEmpty();
+                        if( logNotes )
+                            juce::Logger::writeToLog( "SimNote: track '" + getName() + "' tick " + juce::String( pos ) + " pos " + juce::String( posOnTrack ) + " note " + juce::String( noteNo ) + " velocity " + juce::String( noteVelocity ) + " id " + juce::String( it->id.get() ) );
+#endif
 
                         // Check Ratchet
                         auto parts = (int)( it->ratchet.get() );
@@ -336,7 +359,12 @@ namespace mt
         if( pProgram->isAudio() )
             return;
 
+        if( Tick < prevTick ) // clock restarted (play() while a tick was in flight)
+            prevTick = 0;
         unsigned int diffTick = Tick - prevTick;
+
+        if( recording.load() )
+            takeTicks += diffTick;
 
         tickCtr += diffTick;
         tickPos += diffTick;
@@ -433,6 +461,106 @@ namespace mt
         auto msg = juce::MidiMessage::allNotesOff( getMidiOutChannel() );
         processIncomingMidiMessage( msg );
         queuedNotes.clear();
+    }
+
+    ///
+    /// Live note recording.
+    ///
+    void MTTrack::startRecording( bool Replace )
+    {
+        if( recording.load() )
+            stopRecording();
+
+        const juce::ScopedLock sl( lock );
+        const auto             len = lengthInTicks.load();
+
+        // Notes that existed before the take: ids are unique and only grow (MTNoteUtil::createVT).
+        int lastId = 0;
+        for( auto n : getNoteListVT() )
+            lastId = juce::jmax( lastId, (int)n.getProperty( IDs::id ) );
+
+        // The first position the take plays: the next tick, or position 0 before the first tick.
+        takeStart = ( 0 == len ) ? 0 : ( playFromStart.load() ? tickPos : ( tickPos + 1 ) ) % len;
+        takeTicks.store( 0 );
+        takeLastOldId.store( lastId );
+        heldNotes.clear();
+        replacing.store( Replace );
+        recording.store( true );
+        juce::Logger::writeToLog( "Record: take on track '" + getName() + "' (" + ( Replace ? "RECORD, replace" : "OVERDUB" ) + ") from tick " + juce::String( takeStart ) );
+    }
+
+    void MTTrack::stopRecording()
+    {
+        if( !recording.load() )
+            return;
+
+        const juce::ScopedLock sl( lock );
+        const auto             len = lengthInTicks.load();
+        recording.store( false );
+
+        // Close notes still held (pad not released before STOP).
+        if( 0 < len )
+        {
+            const auto pos = tickPos % len;
+            for( auto& it : heldNotes )
+            {
+                auto length = (int)( ( pos + len - it.second.first ) % len );
+                addNote( it.first, it.second.second, PROBABILITY::MAX, 1, (int)it.second.first, juce::jmax( 1, length ), true );
+            }
+        }
+        heldNotes.clear();
+
+        // RECORD: erase the old notes the playhead passed during the take.
+        int erased = 0;
+        if( replacing.load() && 0 < len )
+        {
+            const auto      passed = takeTicks.load();
+            juce::Array<int> ids;
+            for( auto n : getNoteListVT() )
+            {
+                const int id    = n.getProperty( IDs::id );
+                const int start = n.getProperty( IDs::start );
+                const auto dist = (unsigned int)( ( (unsigned int)juce::jmax( 0, start ) + len - takeStart ) % len );
+                if( id <= takeLastOldId.load() && ( passed >= len || dist < passed ) )
+                    ids.add( id );
+            }
+            for( auto id : ids )
+                eraseNote( id );
+            erased = ids.size();
+        }
+        replacing.store( false );
+        triggerAsyncUpdate();
+        juce::Logger::writeToLog( "Record: take on track '" + getName() + "' ended after " + juce::String( takeTicks.load() ) + " ticks, " + juce::String( erased ) + " old notes erased, " + juce::String( getNumNotes() ) + " notes" );
+    }
+
+    void MTTrack::recordMidiMessage( const juce::MidiMessage& Msg )
+    {
+        if( !recording.load() || !Msg.isNoteOnOrOff() )
+            return;
+
+        const juce::ScopedLock sl( lock );
+        const auto             len = lengthInTicks.load();
+        if( 0 == len )
+            return;
+
+        // The position of the last tick played: the hit sounds now, between this tick and the next.
+        const auto pos = tickPos % len;
+        const int  no  = Msg.getNoteNumber();
+        if( Msg.isNoteOn() )
+        {
+            heldNotes[no] = { pos, (int)Msg.getVelocity() };
+        }
+        else if( auto it = heldNotes.find( no ); it != heldNotes.end() )
+        {
+            auto       length = (int)( ( pos + len - it->second.first ) % len );
+            const auto played = (int)it->second.first;
+            const auto start   = recordTimingCorrect ? ( recordTimingCorrect( played ) % (int)len ) : played; // TC
+            addNote( no, it->second.second, PROBABILITY::MAX, 1, start, juce::jmax( 1, length ), true );
+            juce::Logger::writeToLog( "Record: note " + juce::String( no ) + " velocity " + juce::String( it->second.second ) + " at tick " + juce::String( start )
+                                      + ( start != played ? " (played at " + juce::String( played ) + ", timing corrected)" : juce::String() ) + " length " + juce::String( juce::jmax( 1, length ) ) );
+            heldNotes.erase( it );
+            triggerAsyncUpdate();
+        }
     }
 
 #if 0

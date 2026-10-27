@@ -53,6 +53,16 @@ public:
 
         // Opt-in scripting channel (KICK_SIM_CONTROL=<file>, see kick_SimControl.h).
         control = std::make_unique<sim::SimControl>( *window->getContentComponent(), kick_ui::KickHome::Instance() );
+        sim::SimControl::statusProvider = []() {
+            auto&      ae  = mt::getAudioInterface();
+            const auto bnb = ae.getPlayhead().bnb; // shown 1-based, as BAR : BEAT : TICK on screen
+            const auto rec = ae.isSequenceRecording() ? "recording" : ( ae.isSequenceRecordArmed() ? "armed" : "off" );
+            return juce::String( ae.isSequencePlaying() ? "playing" : "stopped" )
+                   + " bbt=" + juce::String( bnb.bar + 1 ) + ":" + juce::String( bnb.beat + 1 ).paddedLeft( '0', 2 ) + ":" + juce::String( bnb.tick ).paddedLeft( '0', 3 )
+                   + " bpm=" + juce::String( ae.getMasterBPM() ) + " clock=" + juce::String( mt::getMidiClock().getTempo(), 1 )
+                   + " rec=" + rec + ( ae.isSequenceRecordArmed() && ae.isSequenceRecordOverdub() ? "(overdub)" : "" )
+                   + " metronome=" + ( mt::getSettings().metronome.enabled() ? "on" : "off" );
+        };
     }
 
     void shutdown() override
