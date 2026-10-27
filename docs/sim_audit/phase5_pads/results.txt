@@ -1,0 +1,35 @@
+Kick/tools/sim_pads.sh, 2026-10-27, Starter Kit, KICK_SIM_AUDIO_INPUT=silence, screen locked or not (sim_ctl.sh only)
+
+  ok    jog on MAIN selects the next track
+  ok    jog back selects the previous track
+sim_pads: measurements
+  ok    FULL LEVEL: soft hit (vel 30) plays at velocity 127: vel127 -7.0, vel30 -21.2, vel30+FULL -7.0 dBFS
+  ok    HALF LEVEL: soft hit plays at velocity 64: vel30+HALF -13.7, vel64 -13.7 dBFS
+  ok    16 LEVELS: 16 increasing levels: -40.5 -33.5 -29.5 -26.6 -24.3 -22.5 -20.9 -19.5 -18.3 -17.2 -16.3 -15.4 -14.6 -13.9 -13.3 -12.7 dBFS
+  ok    NOTE REPEAT held: pad retriggers at 1/16 of 120 BPM (125 ms): 10 onsets, median interval 120.0 ms
+  ok    LATCH: pad retriggers at 1/16 of 120 BPM (125 ms): 9 onsets, median interval 125.0 ms
+  ok    no repeat without NOTE REPEAT / LATCH: 1 onset(s) for a 1 s hold
+  ok    NOTES: pads play chromatic notes (pad 2 = +1 semitone, pad 13 = +1 octave): pad 1 130.8 Hz, pad 2 138.8 Hz, pad 13 261.7 Hz
+  ok    ERASE + pad removes that pad's hits from playback: onsets in 2 bars: 13 before, 12 after ERASE + Pad 3 (hats), 0 after ERASE + all pads
+sim_pads: packets and LEDs
+  ok    banks B-D: bank LED and pad colours per bank
+  ok    banks E-H: bank LED (SHIFT + A-D)
+  ok    bank B recolours the pads (keys: colour 6)
+  ok    FULL LEVEL LED on, HALF LEVEL off
+  ok    HALF LEVEL LED on, FULL LEVEL off
+  ok    16 LEVELS LED and level colours on the pads
+  ok    NOTE REPEAT LED
+  ok    LATCH LED
+  ok    touched control takes focus
+  ok    slider, + / - and jog reach the focused control
+  ok    P1-P4 reach the screen (MAIN, TRACK MIX, STEP SEQ)
+  ok    STEP SEQ: P2 changes step 2's level on the pads
+  ok    BACK runs the header back arrow of BROWSE and PROG EDIT
+  ok    MENU: jog 2, + 1, PUSH opens the 4th item (NEXT SEQ LED)
+  ok    ERASE + pad erases notes
+sim_pads: PASS
+
+Screenshots: half_level_panel.png (HALF LEVEL shown on the FULL LEVEL key), 16_levels_panel.png (pads in the
+hat's colour, dim to bright), slider_30_level.png (touched LEVEL 100 -> 38), jog_focused_level.png (+ + - jog+3:
+42), stepseq_p2.png, grid_copy.png / grid_erase.png (COPY duplicates the selected hat on step 2; ERASE removes
+the copy), notes_chromatic.png (Pad Notes, Chromatic).

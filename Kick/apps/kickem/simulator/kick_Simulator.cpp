@@ -244,10 +244,11 @@ namespace sim
         setMouseCursor( juce::MouseCursor::PointingHandCursor );
     }
 
-    void PadButton::set( int ColourId, int State )
+    void PadButton::set( int ColourId, int State, int Velocity )
     {
-        colourId = ColourId;
-        state    = State;
+        colourId   = ColourId;
+        state      = State;
+        brightness = juce::jlimit( 0, 127, Velocity );
         repaint();
     }
 
@@ -255,7 +256,8 @@ namespace sim
     {
         pressed = pressed || scriptedDown;
         auto       bounds = getLocalBounds().toFloat().reduced( 1.f );
-        const auto base   = padColourFor( colourId );
+        // Dimmer for a lower velocity (STEP SEQ steps, 16 LEVELS): towards the unlit pad colour.
+        const auto base   = padColourFor( colourId ).interpolatedWith( juce::Colour( 0xff2b2b2b ), 0.8f * ( 1.f - (float)brightness / 127.f ) );
         const bool lit    = state != DCC::StateOff && colourId != DCC::PadColourTrans;
 
         // Rubber pad.
@@ -747,9 +749,12 @@ namespace sim
         switch( msg.pktCmd )
         {
             case DCC::EN_PAD_SET_SINGLE_PAD: // pad, state, colour
-            case DCC::EN_PAD_SET_STEP_SINGLE_PAD: // pad, state, colour, velocity
             case DCC::EN_PAD_SET_BLINKING: // pad, state, on colour, off colour
                 if( at( 0 ) >= 0 && at( 0 ) < 16 ) pads[(size_t)at( 0 )]->set( at( 2 ), at( 1 ) );
+                break;
+
+            case DCC::EN_PAD_SET_STEP_SINGLE_PAD: // pad, state, colour, velocity
+                if( at( 0 ) >= 0 && at( 0 ) < 16 ) pads[(size_t)at( 0 )]->set( at( 2 ), at( 1 ), at( 3, 127 ) );
                 break;
 
             case DCC::EN_PAD_SET_ALL_SINGLE_COLOUR: // state, colour
@@ -757,8 +762,11 @@ namespace sim
                 break;
 
             case DCC::EN_PAD_SET_ALL_MULTI_COLOUR: // state, colour x16
-            case DCC::EN_PAD_SET_STEP_ALL_PAD: // state, colour x16, velocity x16
                 for( size_t i = 0; i < 16; ++i ) pads[i]->set( at( 1 + i ), at( 0 ) );
+                break;
+
+            case DCC::EN_PAD_SET_STEP_ALL_PAD: // state, colour x16, velocity x16 (STEP SEQ, 16 LEVELS)
+                for( size_t i = 0; i < 16; ++i ) pads[i]->set( at( 1 + i ), at( 0 ), at( 17 + i, 127 ) );
                 break;
 
             case DCC::EN_PAD_SET_COLOUR_STATE: // colour x16, state x16

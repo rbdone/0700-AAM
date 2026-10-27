@@ -150,6 +150,8 @@ Everything a check needs is in `Kick/tools/` and works from any directory:
 | `sim_click.sh NAME...`, `--at X Y`, `--list [FILTER]` | Touches the **screen** rather than the panel: clicks an on-screen component by its accessibility title (Preferences tabs `Info`, `Hardware`, `CV`, `Ethernet`, `WiFi`; buttons such as `Firmware Update`, `Resources`), or pixel (X,Y) of the 1024x600 Kick screen wherever the window has scaled it; `--list` prints every accessible element with its frame. A real mouse click (CGEvent) through a small Swift helper (`sim_ax.swift`, compiled on first use into `Kick/build/sim_ax`). Needs Accessibility permission and an unlocked, visible window. |
 | `sim_ctl.sh press\|click\|tap\|shot\|list\|echo ...` | The same jobs **from inside the app**, with no accessibility and no window server, so it keeps working while the Mac is locked or asleep or the window is covered. `press NAME` = panel control by printed name (as `sim_press.sh`), `click NAME` = on-screen component by title (as `sim_click.sh`), `tap X Y` = Kick-screen pixel, `shot OUT.png` = renders the panel to `OUT.png`, the Kick screen at its native 1024x600 to `OUT-screen.png` and each popup window to `OUT-<n>.png`, `list [FILTER]` = titled components, `echo TEXT` = marker in the log. Each command waits for the app's acknowledgement (`SimControl: ok <n>`), so a blocked message thread shows up as a timeout and exit status 1. `turn KNOB STEPS` turns encoder `P1`-`P4` or `JOG` by signed detents and `slider VALUE` sets the slider (0-100); see the next row. |
 | `sim_turn.sh P1..P4\|JOG STEPS`, `sim_turn.sh SLIDER V` | Shorthand for `sim_ctl.sh turn` / `slider`: the encoders and the slider are not buttons, so `sim_press.sh` cannot reach them. Each detent is one `EN_PKT_TYPE_KNOBS` packet of magnitude 1 (cmd `EN_KNOB_QLINK` for P1-P4, `EN_KNOB_ROTARY` for the jog wheel), sent through the knob's own `onStep`, the same path as a mouse drag; positive is clockwise. The slider sends one `EN_PKT_TYPE_SLIDER` / `EN_SLIDER_TOUCH_INPUT` packet with the absolute value. (Arrow up/down in 4.3 also turn the jog wheel, but only while the window has keyboard focus.) |
+| `sim_ctl.sh down NAME [VEL]`, `up NAME`, `hold NAME SECS [VEL]` | Hold a pad or key (section 4.9): `down` presses it and leaves it pressed, `up` releases it, `hold` does both with SECS in between and answers after the release. Pads take a velocity (1-127; the default is the pad's last one, 100 at start), e.g. `hold "Pad 1" 0.1 30` is one soft hit; `down ERASE`, `press "Pad 3"`, `up ERASE` is ERASE + pad. Packets are sent directly (no mouse state), so it works with the screen locked. |
+| `sim_pads.sh [OUTDIR]` | The phase 5 check for pads, modifiers, encoders and the slider (section 4.9). |
 | `sim_sampler_looper.sh [OUTDIR]` | The phase 4 check (section 4.6): sampler record / preview / save to a pad / trim, and looper record / loop / overdub, measured on the audio probe. |
 | `wav_measure.py FILE [--from S] [--to S] [--thr DB] [--onsets]` | Length, peak, RMS, extent above a threshold and burst onsets of a WAV (the probe or a recorded sample). Needs numpy. |
 
@@ -477,6 +479,84 @@ pad's `gain` (as it ignores the pad's semi / fine, 4.4); gain staging belongs to
 `gap` row in `sim_modes.sh` turns into `ok` once Pad 1 gets quieter. FX (XY Effects) only updates
 its labels; nothing connects it to audio in this release. LINK reaches
 `KnobEdit::knobLongPress()` with no visible change on Main (Q-Link pages, phase 5b).
+
+### 4.9 Pads, modifiers, encoders and slider (phase 5)
+
+`Kick/tools/sim_pads.sh [OUTDIR]` (default `Kick/build/logs/sim_pads`) loads the Starter Kit,
+plays every control below through `sim_ctl.sh`, measures the audio probe and the LED / pad packets
+(`KICK_SIM_LOG_SURFACE=1`) and exits non-zero if a check fails. Screenshots, the log and the probe
+stay in OUTDIR. It does not save the project. Last run (2026-10-27): all passed.
+
+| Control | What it does now | Measured by `sim_pads.sh` |
+|---|---|---|
+| A-D, E-H | Pad bank; LED; pads recolour (`PAD cmd=6`) | A kit colours, B keys (6), C, D; E-H "no sample" (the kit has nothing above note 63) |
+| FULL LEVEL | Toggle: every pad hit at velocity 127; HALF LEVEL off | vel 30 hit -21.2 dBFS → -7.0 dBFS = vel 127 |
+| HALF LVL (SHIFT + FULL LEVEL) | Toggle: every pad hit at velocity 64; FULL LEVEL off | vel 30 hit → -13.7 dBFS = vel 64 |
+| 16 LEVELS | Toggle: the last pad hit, on all 16 pads, velocity 7, 15, ... 127 (pad 1 → 16); the pads show its colour dim to bright (`PAD cmd=10`) | 16 hits from -40.5 to -12.7 dBFS, each louder |
+| NOTE REPEAT (held) | Held pads retrigger at the sequence's time-correct division (TC; 1/16 by default) and tempo; on the grid while the sequencer plays | 1 s hold: 9-10 hits, median 120-130 ms (125 ms expected) |
+| LATCH (SHIFT + NOTE REPEAT) | Toggle: note repeat without holding NOTE REPEAT | 8-9 hits, median 125-130 ms; without it 1 hit |
+| NOTES (SHIFT + 16 LEVELS) | Pad Perform (Chromatic by default) | Keys track: pads 1 / 2 / 13 = 130.8 / 138.8 / 261.7 Hz |
+| ERASE held + pad | Erases the pad's notes from the selected track (no sound) | Pad 3: 20 notes erased, playback onsets 13 → 12; all pads: 0 onsets |
+| ERASE in GRID, COPY | Delete / duplicate the selected notes (unchanged; ERASE now acts on the press only) | screenshots `19`-`21` |
+| BACK | The current screen's header back arrow (`KickHome::goBack`) | BROWSE and PROG EDIT → MAIN |
+| Jog, PUSH | MAIN: selects tracks; MENU: moves / opens; a touched value: edits it | track 1 ↔ 2; MENU jog 2, +, PUSH → NEXT SEQ |
+| + / -, slider | Edit the touched (focused) value | touched LEVEL: slider 30 → 38, + + → 40, - → 39, jog +3 → 42 |
+| P1-P4 | MAIN Track tab: I/P MIDI CH, LENGTH, LEVEL, TRANSPOSE of the first row; TRACK MIX: OUT, LEVEL, PAN, mute/solo of strip 1; STEP SEQ: level of steps 1-4 of the page; PROG EDIT: nothing | P3 +5 LEVEL 42 → 47; P4 +2 TRANSPOSE → 2; TRACK MIX P2 -10 → 90, P3 -3 pan → -1.00; STEP SEQ P2 sets step 2 |
+
+**What was missing and where it was looked for.** `KickHome::handleCommand` (the global switch),
+the 62 `handleCommand` implementations, `DclContractsHelper`, `kick_leds.cpp` and every pad path
+(`ae.addLiveMidiMsg` in MAIN, GRID, BROWSE, NOTES, the mixers, PROG EDIT; `MTTrack::processIncomingMidiMessage`)
+were searched for NOTE REPEAT, LATCH, 16 LEVELS, BACK and any repeat or level logic: there is none
+in the release. FULL / HALF LEVEL only lit an LED and set `halfLevelState`, which only STEP SEQ
+reads (step velocity), and project load always lit FULL LEVEL. `modes/kick_Erase.cpp` and
+`kick_Copy.cpp` are "Erase Notes" / copy dialogs that nothing opens. The pad screens send
+`noteOn( pad + bank offset, packet velocity )`, so the natural place for pad modifiers is the
+packet itself, before the screen sees it.
+
+**Shared code added or changed** (the device build runs it too):
+
+- `kick_ui/dialogs/kick_PadModifiers.{h,cpp}` (new), called from `KickHome::handleCommand` for every
+  packet while a project is loaded (not in MIDI CONTROL, which learns keys). It consumes FULL LEVEL,
+  HALF LEVEL, 16 LEVELS, NOTE REPEAT and LATCH (no screen used them), and rewrites pad packets:
+  velocity for FULL / HALF LEVEL on every screen; pad number and velocity for 16 LEVELS, note
+  repeat and ERASE + pad only on screens whose pads play the selected track (MAIN, GRID, TRACK MIX,
+  PROG EDIT, NOTES), not where pads are steps, mutes or sequences. Note repeat retriggers from a
+  2 ms `juce::Timer` on the message thread by handing the screen a release + press of the held
+  pad; the interval is `60000 / BPM x ticks-per-quantization / 96` (the selected sequence's TC
+  setting, `MTTempoMgr::getTicksPerQuantization`; master BPM unless the sequence has its own).
+  ERASE + pad calls `deleteNotesInRange( selected track, note, note )` and logs the count.
+- Inferences, not documented anywhere in the repository: FULL / HALF LEVEL are off by default
+  (pads are velocity-sensitive; the surface gets threshold / sensitivity / curve from the hardware
+  preferences), which is why `kick_leds.cpp` now sends their state at project load instead of
+  lighting FULL LEVEL; 16 LEVELS maps by velocity (as on MPC-style units); LATCH latches the repeat,
+  not the pads; ERASE + pad erases all of that pad's notes at once rather than only those under
+  the playhead while held.
+- `DclContractsHelper::setFullLevel / isFullLevel` (next to the existing half-level flag).
+- `KickHome::goBack` for BACK.
+- `kick_ProgramEdit.cpp`: Q-Link packets were handled as pad hits (P1 played note 1 at velocity 1
+  and relabelled the selected pad); pads only now.
+- `kick_AppGrid.cpp`: ERASE deletes the selection on the press only (the key now also reports its
+  release).
+
+**Key releases.** `AppAssignSample` handles ERASE's release, so the unit reports it; the panel now
+sends releases for ERASE and NOTE REPEAT (the keys that are held). The other keys stay press-only:
+`KickControlsProcessor` and GRID act on any button packet of their id, so a release would step
++ / - or paste twice. If the unit sends releases for every key, those handlers need a state check.
+
+**Focus (simulator only, `SIM_BUILD`).** The jog wheel, + / -, PUSH and the slider go to the
+touched control through JUCE keyboard focus (`ui::getComponentInFocus`). JUCE grants focus only
+while the window is the key window, so with the screen locked (or the window in the background)
+no control ever had focus and those keys reached nothing. `sim_ctl.sh tap` now does what a click
+does (focus to the touched component or its nearest focusable parent) and records it in
+`ui::simFocusTarget()` (`kick_ControlBase.h`), which `getComponentInFocus` uses while JUCE has no
+focused component; `setFocus` / `clearFocusComponent` keep it in step. As on the device, a value
+change can rebuild the row and drop the focus; touch again. While a control has focus, P1-P4 go to
+it too (and do nothing): that is the app's routing (`KickHome::handleCommand`), unchanged.
+
+**Panel** (`apps/kickem/simulator`): a SHIFT function's LED with no key of its own (HALF LEVEL 49,
+LATCH 25, GRID 9, ...) lights the key it is printed under while either LED is on; the slider's LED
+ladder shows the app's `SLIDER cmd=1/2` value (the touched control's value, or MAIN's track
+meter); `PAD cmd=9/10` step colours are dimmed by their velocity, so 16 LEVELS shows its levels.
 
 ## 5. What had to change to make the public release build
 

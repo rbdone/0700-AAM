@@ -83,7 +83,7 @@ namespace sim
     public:
         explicit PadButton( int Index );
 
-        void set( int ColourId, int State );
+        void set( int ColourId, int State, int Velocity = 127 ); // velocity: brightness (step / 16 LEVELS colours)
         void paintButton( juce::Graphics& g, bool highlighted, bool down ) override;
         void mouseDown( const juce::MouseEvent& e ) override;
         void buttonStateChanged() override;
@@ -98,6 +98,7 @@ namespace sim
         const int index;
         int       colourId{ DCC::PadColourTrans };
         int       state{ DCC::StateOff };
+        int       brightness{ 127 };
         int       velocity{ 100 }; // set from the click position; accessibility clicks keep the default
         bool      wasDown{ false }, scriptedDown{ false };
     };

@@ -118,11 +118,12 @@ mark back
 "$C" press "PROG EDIT"; sleep 1.5; "$C" turn P1 2; sleep 0.3; shot 17-progedit-p1
 "$C" press "key 29"; sleep 1.5; shot 18-back-from-progedit
 
-#### GRID: select the kick row's notes with Pad 1, COPY, ERASE ###############################
+#### GRID: select a note (arrow tool, touch the first hat), COPY, then ERASE the copy ##########
 mark grid
-"$C" press GRID; sleep 1.5; "$C" press "Pad 1"; sleep 0.5; shot 19-grid-pad1
-"$C" press "key 20"; sleep 0.5; shot 20-grid-copy
-"$C" press ERASE; sleep 0.5; shot 21-grid-erase
+"$C" press GRID; sleep 1.5; "$C" tap 602 37; sleep 0.3
+"$C" tap 180 481; sleep 0.5; shot 19-grid-selected       # A3 (hat) on 1.1 outlined
+"$C" press "key 20"; sleep 0.5; shot 20-grid-copy        # a copy right after it, on step 2
+"$C" tap 233 481; sleep 0.5; "$C" press ERASE; sleep 0.5; shot 21-grid-erase   # the copy is gone
 "$C" press "key 29"; sleep 1.5
 
 #### NOTES (Pad Perform) on the Keys track ##################################################
@@ -140,6 +141,12 @@ mark play1; "$C" press PLAYSTART; sleep 4; "$C" press STOP; sleep 1
 mark play2; "$C" press PLAYSTART; sleep 4; "$C" press STOP; sleep 1
 "$C" down ERASE; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do "$C" press "Pad $i"; done; "$C" up ERASE; sleep 0.3
 mark play3; "$C" press PLAYSTART; sleep 4; "$C" press STOP; sleep 1
+#### MENU: jog through the list, + steps once more, PUSH opens the item ######################
+mark menu
+"$C" press MENU; sleep 1.5; "$C" turn JOG 2; "$C" press "key 21"; sleep 0.5; shot 19a-menu
+"$C" press PUSH; sleep 1.5; shot 19b-menu-push               # item 4: Next Sequence
+"$C" press MAIN; sleep 1.5   # (last: NEXT SEQ may switch the sequence)
+
 mark end
 shot 24-erased
 
@@ -156,15 +163,20 @@ for line in open(sys.argv[2]):
 def window(k):
     i = order.index(k); return marks[k], (marks[order[i + 1]] if i + 1 < len(order) else len(x) / sr)
 m = np.max(np.abs(x), axis=1)
-hop = int(0.002 * sr); n = len(m) // hop
-env = 20 * np.log10(np.maximum(m[:n * hop].reshape(n, hop).max(axis=1), 1e-6))
-def onsets(k, floor=-45, rise=12):
+def envelope(hop_s):
+    hop = int(hop_s * sr); n = len(m) // hop
+    return hop, n, 20 * np.log10(np.maximum(m[:n * hop].reshape(n, hop).max(axis=1), 1e-6))
+ENV = {h: envelope(h) for h in (0.002, 0.010)}
+def onsets(k, floor=-45, rise=12, hop_s=0.002):
+    """Onsets: the level (max over hop_s) rises by `rise` dB over the 5 hops before it."""
+    hop, n, env = ENV[hop_s]
     a, b = window(k); i0, i1 = int(a * sr / hop), int(b * sr / hop)
+    gap = int(0.05 * sr / hop)
     on = []
     for i in range(max(i0, 6), min(i1, n)):
-        if env[i] > floor and env[i] - env[i - 5:i].max() > rise and (not on or i - on[-1] > 25):
+        if env[i] > floor and env[i] - env[i - 5:i].max() > rise and (not on or i - on[-1] > gap):
             on.append(i)
-    return [(i * hop / sr, env[i:i + 50].max()) for i in on]
+    return [(i * hop / sr, env[i:i + int(0.1 * sr / hop)].max()) for i in on]
 def f0(t, dur=0.3):
     s = x[int((t + 0.03) * sr):int((t + 0.03 + dur) * sr)].mean(axis=1)
     s = s * np.hanning(len(s)); sp = np.abs(np.fft.rfft(s, 8 * len(s))); f = np.fft.rfftfreq(8 * len(s), 1 / sr)
@@ -199,7 +211,7 @@ for k, label in (('repeat', 'NOTE REPEAT held'), ('latch', 'LATCH')):
 on = onsets('plain')
 check('no repeat without NOTE REPEAT / LATCH', len(on) == 1, f'{len(on)} onset(s) for a 1 s hold')
 
-nt = onsets('notes', floor=-50, rise=6)   # the keys ring on over the next note
+nt = onsets('notes', floor=-50, rise=6, hop_s=0.010)   # the keys ring on into the next note
 if len(nt) >= 3:
     f = [f0(t) for t, _ in nt[:3]]
     check('NOTES: pads play chromatic notes (pad 2 = +1 semitone, pad 13 = +1 octave)',
@@ -228,6 +240,7 @@ check "slider, + / - and jog reach the focused control" sh -c "awk '/MARK focus/
 check "P1-P4 reach the screen (MAIN, TRACK MIX, STEP SEQ)" afterhas qlinks "Data\[0\] From DCL:3 cmd From DCL : 1 type From DCL : 4 In Recent Prj register handle command"
 check "STEP SEQ: P2 changes step 2's level on the pads" afterhas qlinks "PAD cmd=10"
 check "BACK runs the header back arrow of BROWSE and PROG EDIT" sh -c "awk '/MARK back/{f=1} f' '$LOG' | grep -q 'BACK: header back'"
+check "MENU: jog 2, + 1, PUSH opens the 4th item (NEXT SEQ LED)" afterhas menu "LED cmd=0 data=16,1"
 check "ERASE + pad erases notes" afterhas erase "PadModifiers: ERASE pad 3 note 2: [1-9][0-9]* notes erased from track 1"
 echo "sim_pads: screenshots in $OUT"
 [ "$FAIL" = 0 ] && echo "sim_pads: PASS" || echo "sim_pads: FAIL"
