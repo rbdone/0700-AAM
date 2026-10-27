@@ -31,7 +31,7 @@ P1="$OUT/tone-probe.wav"
 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=tone KICK_SIM_AUDIO_PROBE="$P1" "$TOOLS/sim_launch.sh" "$OUT/tone.log" >/dev/null
 trap '"$TOOLS/sim_quit.sh"' EXIT
 
-"$CTL" tap 110 150; sleep 3                       # Projects: touch "Demo 01"
+"$CTL" tap 283 150; sleep 3                       # Projects: touch "Demo 01" (second tile; Starter Kit is first)
 "$CTL" tap 76 108; "$CTL" tap 993 108; sleep 1 # MAIN: Sequence tab (named " Sequence "), "+"
 "$CTL" click Program; "$CTL" tap 993 108; sleep 1  # Program tab, "+" -> CREATE PROGRAM
 "$CTL" click Drum; "$CTL" click Apply; sleep 1
@@ -74,7 +74,7 @@ echo "== after Discard (trim)"; $M "$OUT/trimmed.wav"
 #### Session 2: pulse train on the input, reloaded project ################################
 P2="$OUT/pulse-probe.wav"
 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=pulse:700 KICK_SIM_AUDIO_PROBE="$P2" "$TOOLS/sim_launch.sh" "$OUT/pulse.log" >/dev/null
-"$CTL" tap 110 150; sleep 3
+"$CTL" tap 283 150; sleep 3
 T_PAD2=$(at "$P2"); "$CTL" press "Pad 1"; sleep 2.5 # the reloaded program plays the trimmed file
 "$CTL" press LOOP; sleep 1.5                        # SHIFT + SAMPLER; LENGTH 4 bars
 T_REC=$(at "$P2"); "$CTL" press "key 42"; sleep 26  # RECORD: one pass, then it plays

@@ -49,7 +49,7 @@ select_track() { # the track list clamps, so: all the way up, then down to track
 }
 
 "$TOOLS/sim_quit.sh"
-KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$PROBE" "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || exit 1
+KICK_SIM_FRESH=1 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$PROBE" "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || exit 1
 trap '"$TOOLS/sim_quit.sh"' EXIT
 sleep 2
 "$C" press PUSH; sleep 4                              # Projects: load the Starter Kit

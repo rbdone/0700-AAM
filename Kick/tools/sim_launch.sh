@@ -12,6 +12,10 @@
 #       microphone to the speakers by itself, but the SAMPLER / LOOPER MONITOR buttons do, and on a
 #       laptop that howls. Pass "device" for the real input (headphones).
 #
+#   KICK_SIM_FRESH=1                  first restore Kick/build/demos and Kick/build/templates from the
+#                                     sources: SAVE writes into those build copies, so a check that
+#                                     saved (e.g. a pad level of 0) would otherwise leak into the next.
+#
 # The in-app scripting channel used by sim_ctl.sh is always on: KICK_SIM_CONTROL defaults to
 # Kick/build/.sim_ctl (emptied here), and the log path is recorded in Kick/build/.sim_log.
 #
@@ -59,6 +63,12 @@ while :; do
     sleep 5
     waited=$((waited + 5))
 done
+
+if [ -n "${KICK_SIM_FRESH:-}" ]; then
+    for d in demos templates; do
+        rm -rf "${BUILD:?}/$d" && cp -R "$TOOLS/../$d" "$BUILD/$d"
+    done
+fi
 
 mkdir -p "$(dirname "$LOG")"
 export KICK_SIM_AUDIO_INPUT=${KICK_SIM_AUDIO_INPUT:-silence}

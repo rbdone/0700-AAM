@@ -48,7 +48,7 @@ cp -R "$TOOLS/../demos/Starter Kit" "$BUILD/demos/"
 
 "$TOOLS/sim_quit.sh"
 KICK_SIM_LOG_NOTES=1 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$P" \
-    "$TOOLS/sim_launch.sh" "$OUT/app.log" >/dev/null
+    KICK_SIM_FRESH=1 "$TOOLS/sim_launch.sh" "$OUT/app.log" >/dev/null
 trap '"$TOOLS/sim_quit.sh"' EXIT
 sleep 2
 key PUSH; sleep 4                                   # Projects: load "Starter Kit" (first tile)

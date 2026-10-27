@@ -34,7 +34,7 @@ cp "$TOOLS/../demos/Demo 01/Demo 01.kickPrj" "$BUILD/demos/Demo 01/Demo 01.kickP
 
 "$TOOLS/sim_quit.sh"
 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$OUT/probe.wav" \
-    "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || { echo "sim_modes: launch failed" >&2; exit 1; }
+    KICK_SIM_FRESH=1 "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || { echo "sim_modes: launch failed" >&2; exit 1; }
 trap '"$TOOLS/sim_quit.sh"' EXIT
 PID=$(cat "$BUILD/.sim_pid")
 
@@ -126,7 +126,7 @@ cp "$LOG" "$OUT/sim-empty.log"
 "$TOOLS/sim_quit.sh"
 sleep 1
 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$OUT/probe.wav" \
-    "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || { echo "sim_modes: launch failed" >&2; exit 1; }
+    KICK_SIM_FRESH=1 "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || { echo "sim_modes: launch failed" >&2; exit 1; }
 PID=$(cat "$BUILD/.sim_pid")
 
 #### Load the Starter Kit ###################################################################

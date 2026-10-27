@@ -70,7 +70,7 @@ trap 'exit 1' INT TERM
 
 say "== launch"
 rm -f "$OUT/probe.wav"
-PID=$(KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$OUT/probe.wav" KICK_SIM_LOG_SURFACE=1 \
+PID=$(KICK_SIM_FRESH=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$OUT/probe.wav" KICK_SIM_LOG_SURFACE=1 \
       "$TOOLS/sim_launch.sh" "$LOG") || { say "FAIL  launch / handshake, see $LOG"; exit 1; }
 pass "handshake (Send Comm Live), pid $PID"
 

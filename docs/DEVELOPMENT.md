@@ -391,7 +391,7 @@ simulator with a test input and the probe, e.g.
 
 | Step | Commands | What happens |
 |---|---|---|
-| Load a project | `tap 110 150` (the first tile) | A touch or PUSH. PUSH used to load an empty project with no directory (see 5.1, Phase 4 findings); fixed in phase 2 (4.4). Since phase 2 the first tile is Starter Kit, which already has programs and tracks. |
+| Load a project | `tap 283 150` (Demo 01, the second tile; `tap 110 150` is the first, Starter Kit) | A touch or PUSH. PUSH used to load an empty project with no directory (see 5.1, Phase 4 findings); fixed in phase 2 (4.4). Since phase 2 the first tile is Starter Kit, which already has programs and tracks. |
 | Make a pad playable | `tap 76 108` (the Sequence tab: its name is " Sequence "), `tap 993 108`; `click Program`, `tap 993 108`, `click Drum`, `click Apply`; `click Track`, `tap 993 108`, `tap 33 222`, `click "Program 01"`, `click Apply` | MAIN screen tabs and their "+": a sequence (it gives the looper its tempo), a drum program, and a track that plays it. Pads play the selected track's program. |
 | Record | `press SAMPLER`, `turn P1 -18` (Max Length 20 s -> 2 s; P1 = seconds, P2 = minutes), `click recordButton` | "Waiting for Signal" until the input crosses the threshold, then records and stops by itself at Max Length; touching the button again stops early. |
 | Preview | `click Play` | Plays the take once through the master. |
