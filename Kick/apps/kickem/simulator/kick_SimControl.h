@@ -30,6 +30,7 @@ namespace sim
     ///   slider VALUE        move the slider to VALUE (0..100)
     ///   shot FILE.png       render the panel window to FILE.png and every other visible app
     ///                       window (the full-screen popups) to FILE-<n>.png
+    ///   turn KNOB STEPS     turn P1..P4 or JOG by STEPS detents (negative = anticlockwise)
     ///   list [FILTER]       log the titled, showing components ("SimControl: item ...")
     ///   echo TEXT           log "SimControl: echo TEXT" (a marker for scripts)
     ///

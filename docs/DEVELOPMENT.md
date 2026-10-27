@@ -149,6 +149,8 @@ Everything a check needs is in `Kick/tools/` and works from any directory:
 | `sim_click.sh NAME...`, `--at X Y`, `--list [FILTER]` | Touches the **screen** rather than the panel: clicks an on-screen component by its accessibility title (Preferences tabs `Info`, `Hardware`, `CV`, `Ethernet`, `WiFi`; buttons such as `Firmware Update`, `Resources`), or pixel (X,Y) of the 1024x600 Kick screen wherever the window has scaled it; `--list` prints every accessible element with its frame. A real mouse click (CGEvent) through a small Swift helper (`sim_ax.swift`, compiled on first use into `Kick/build/sim_ax`). Needs Accessibility permission and an unlocked, visible window. |
 | `sim_ctl.sh press\|click\|tap\|shot\|list\|echo ...` | The same jobs **from inside the app**, with no accessibility and no window server, so it keeps working while the Mac is locked or asleep or the window is covered. `press NAME` = panel control by printed name (as `sim_press.sh`), `click NAME` = on-screen component by title (as `sim_click.sh`), `tap X Y` = Kick-screen pixel, `shot OUT.png` = renders the panel to `OUT.png`, the Kick screen at its native 1024x600 to `OUT-screen.png` and each popup window to `OUT-<n>.png`, `list [FILTER]` = titled components, `echo TEXT` = marker in the log. Each command waits for the app's acknowledgement (`SimControl: ok <n>`), so a blocked message thread shows up as a timeout and exit status 1. `turn KNOB STEPS` turns encoder `P1`-`P4` or `JOG` by signed detents and `slider VALUE` sets the slider (0-100); see the next row. |
 | `sim_turn.sh P1..P4\|JOG STEPS`, `sim_turn.sh SLIDER V` | Shorthand for `sim_ctl.sh turn` / `slider`: the encoders and the slider are not buttons, so `sim_press.sh` cannot reach them. Each detent is one `EN_PKT_TYPE_KNOBS` packet of magnitude 1 (cmd `EN_KNOB_QLINK` for P1-P4, `EN_KNOB_ROTARY` for the jog wheel), sent through the knob's own `onStep`, the same path as a mouse drag; positive is clockwise. The slider sends one `EN_PKT_TYPE_SLIDER` / `EN_SLIDER_TOUCH_INPUT` packet with the absolute value. (Arrow up/down in 4.3 also turn the jog wheel, but only while the window has keyboard focus.) |
+| `sim_sampler_looper.sh [OUTDIR]` | The phase 4 check (section 4.6): sampler record / preview / save to a pad / trim, and looper record / loop / overdub, measured on the audio probe. |
+| `wav_measure.py FILE [--from S] [--to S] [--thr DB] [--onsets]` | Length, peak, RMS, extent above a threshold and burst onsets of a WAV (the probe or a recorded sample). Needs numpy. |
 
 `sim_ctl.sh` talks to `apps/kickem/simulator/kick_SimControl.cpp`, which `sim_launch.sh` always
 enables (`KICK_SIM_CONTROL=Kick/build/.sim_ctl`; the log path is kept in `Kick/build/.sim_log`).
@@ -169,7 +171,7 @@ Opt-in environment variables, all off by default:
 | Variable | Effect |
 |---|---|
 | `KICK_SIM_AUDIO_PROBE=<file.wav>` | `mt::AudioDevice` writes the engine's master output to that WAV (32-bit float) and logs `AudioProbe: t=<n>s peak=<x>dBFS rms=<y>dBFS` once per second of audio. Silence logs `-120.0dBFS`. |
-| `KICK_SIM_AUDIO_INPUT=tone`, `tone:<hz>`, `pulse` or `<file>` | `mt::AudioDevice` replaces the device input with a test source: a -12 dBFS sine (1 kHz by default), 50 ms 1 kHz bursts every 500 ms at -6 dBFS, or a looped audio file. Logged as `TestInput: ...`. |
+| `KICK_SIM_AUDIO_INPUT=tone`, `tone:<hz>`, `pulse`, `pulse:<ms>` or `<file>` | `mt::AudioDevice` replaces the device input (every channel) with a test source: a -12 dBFS sine (1 kHz by default), 50 ms 1 kHz bursts every 500 ms (or every `<ms>`) at -6 dBFS, or a looped audio file. The pulse train is counted in engine samples, so its onsets are exact in the probe. Use a period that does not divide the bar (e.g. `pulse:700`) to see a loop repeat: the pattern then repeats with the loop length, not the pulse period. Logged as `TestInput: ...`. |
 | `KICK_SIM_CONTROL=<file>` | The simulator polls `<file>` for `sim_ctl.sh` commands (see above). `sim_launch.sh` sets it to `Kick/build/.sim_ctl`; without it nothing is polled. |
 | `KICK_SIM_LOG_SURFACE=1` | The simulated surface logs every packet the app sends it: `SimSurface: LED cmd=0 data=44,1` (type, command, payload). LED commands are `DeviceControlContracts::LedCmd` (0 = set single LED: id, state), pad commands `PadCmd`. |
 
@@ -236,6 +238,32 @@ Not covered: the `SWUpdateWindow` progress screen and the CV/Gate program editor
 (`program_edit_ui/sources/cvgate`). The first is reachable only after an image validates. The
 second needs a CV program, and the shipped projects have none.
 
+### 4.6 Sampler, sample edit and looper (phase 4)
+
+All of this runs through `sim_ctl.sh`, so it works with the screen locked;
+`Kick/tools/sim_sampler_looper.sh` performs it end to end and prints the measurements. Start the
+simulator with a test input and the probe, e.g.
+`KICK_SIM_AUDIO_INPUT=tone KICK_SIM_AUDIO_PROBE=/tmp/p.wav Kick/tools/sim_launch.sh`.
+
+| Step | Commands | What happens |
+|---|---|---|
+| Load a project | `tap 110 150` (the first tile, Demo 01) | Use a touch: PUSH on the Projects screen currently loads an empty project with no directory (see 5.1, Phase 4 findings), and then the sampler cannot save. |
+| Make a pad playable | `tap 76 108` (the Sequence tab: its name is " Sequence "), `tap 993 108`; `click Program`, `tap 993 108`, `click Drum`, `click Apply`; `click Track`, `tap 993 108`, `tap 33 222`, `click "Program 01"`, `click Apply` | MAIN screen tabs and their "+": a sequence (it gives the looper its tempo), a drum program, and a track that plays it. Pads play the selected track's program. |
+| Record | `press SAMPLER`, `turn P1 -18` (Max Length 20 s -> 2 s; P1 = seconds, P2 = minutes), `click recordButton` | "Waiting for Signal" until the input crosses the threshold, then records and stops by itself at Max Length; touching the button again stops early. |
+| Preview | `click Play` | Plays the take once through the master. |
+| Save to a pad | `click Save`, `click Apply` | KEEP OR DISCARD SAMPLES: name, PROGRAM (Program 01), ASSIGN PAD (A01). Writes `<project dir>/../<name>.wav` (`New Sample.wav` beside the project folder), adds it to the project's samples and assigns it to the pad. |
+| Play it | `press MAIN`, `press "Pad 1"` | |
+| Trim | `press "SAMPLE EDIT"`, `click Chop`, `turn P4 24` (START + 24000 samples: P1/P2/P3/P4 = 1/10/100/1000 samples per detent), `click Tune`, `click Process`, `click Discard`, `click Apply` | Discard keeps START..END and rewrites the file. A program that already holds the file keeps playing the old audio until the project is reloaded (see 5.1). |
+| Save the project | `press SAVE` (SHIFT + BROWSE) | |
+| Looper | `press LOOP` (SHIFT + SAMPLER), `press "key 42"` (RECORD), `press "key 43"` (OVERDUB), `press "key 45"` (PLAY), `press "key 44"` (STOP) | LENGTH is in bars of the selected sequence's tempo (4 bars at 120 BPM = 8 s). RECORD records one pass from the top (or punches in at the play position), then plays it round; OVERDUB adds to the loop while it plays, until PLAY (punch out, keep looping in time) or STOP. |
+
+Measured on 2026-10-27 (`sim_sampler_looper.sh`, numbers in the phase 4 commit message):
+the tone take is 96000 frames = 2.000 s at -12.00 dBFS peak / -15.01 dBFS RMS, exactly the
+input; the preview and Pad 1 each play 2.000 s with silence before; Discard with START = 24000
+leaves 72000 frames = 1.500 s, which is what Pad 1 plays after the project is reloaded; the
+looper's playback repeats with a period of 384000 samples = 8.000 s (4 bars at 120 BPM),
+successive periods sample-identical, and an overdub pass adds a second, offset pulse set.
+
 ## 5. What had to change to make the public release build
 
 The release notes say the build "will not work out of the box". This is the complete list of
@@ -287,6 +315,56 @@ and no cmake file. Added:
   The behaviour is plausible, not bit-exact with the original. Known simplifications: looper undo
   is one level; the five `Recorder::Mode` channel modes are interpreted as documented in the
   header.
+
+  **Phase 4 findings** (sampler and looper made to work in `KT_KickEM`, see 4.6):
+  - `AudIO/AudIO/Includes/AudioObject.h`: the object-id counter was `static uint32_t
+    audioObjectId` at namespace scope, i.e. one counter per translation unit. Kick builds AudIO,
+    AudIO_juce and its own engine as separate JUCE module TUs, so objects created in different
+    TUs got the same ids, and `Design::insertObject` refuses an id it already has: the sampler's
+    `mt::SampleRecorder` got id 2, already an engine bus, and was never processed (its
+    `connectInputTo` returned false). Now one `inline std::atomic<uint32_t>` counter for the
+    program (sampler and looper then get ids 33 / 34 and patch). This can affect any object Kick
+    creates in its own TU (`ISynthObject`, `AudioPreview`), not only the recorder.
+  - `mt::Recorder` never called `DawRouting::setID( getId() )` (the original `AudIO::DRecorder`,
+    Kick's `ISynthObject` and `AudioPreview` all do), so `initAudioRouting()` /
+    `connectInputTo()` used an uninitialised routing id: no input, no output.
+  - `onRecorderLengthChanged` now fires as in the public `AudIO::AudioRecorder`: with the set
+    length, and with the recorded length when recording stops; it used to fire every block with
+    the recorded length, which made the sampler's timer show progress x recorded length.
+  - A sampler take stopped early is truncated to what was recorded (as `AudioRecorder::stop()`
+    did), so the progress reads 1.0, and the waveform and saved file have no silent tail. The
+    "OUT MONO" modes are saved as one channel. Recording always runs forward; `Direction` is the
+    playback direction (only the looper's reverse button sets it).
+  - Playback gain: constant-power pan normalised to unity in the centre, so a take plays back at
+    the level it was recorded (it was -3 dB).
+  - Looper (`loopMode`): the buffer is the loop (LENGTH bars of the selected sequence's tempo),
+    one position is shared by playback and recording and wraps at the loop length, so the
+    period is exactly the loop length. RECORD from a stopped looper records one pass from the top
+    and then plays it; while playing it punches in at the play position. OVERDUB adds to the loop
+    while it plays. `setRecord( true )` clears the overdub flag (the screen only sets it for
+    OVERDUB, so a later RECORD used to overdub). `setPlay()` / `play()` (the screen's PLAY /
+    PLAY START keys and buttons) punch out of recording and keep a running loop in time instead of
+    restarting it; a stopped loop starts from the top. `looping` is on by default for the
+    looper. The screen calls `startRecording` twice per key press (`setRecord`, then `start`):
+    only the first places the take.
+  - `saveToFile` logs where it wrote and why it could not.
+  - Not changed, original Kick behaviour found on the way:
+    - PUSH on the Projects screen calls `onMouseDown( selectedIndex, juce::File() )`
+      (`kick_RecentProject.cpp`), i.e. loads an empty project with no directory; the sampler then
+      tries to save to `/New Sample.wav`. A touch on the tile loads the project properly.
+    - A pad's sample source is a `CachedValue` path: after SAMPLE EDIT rewrites the file,
+      assigning the same file again does not reload it, so the pad plays the old audio until
+      the project is reloaded.
+    - The looper's length comes from the selected sequence's tempo; with no sequence it is 1 s
+      whatever LENGTH says (`LoopRecorder::getRecordingLength`).
+    - With the threshold at its default (-100 dB) a looper take starts at the key press.
+    - A pad plays a full-scale take about 8 dB lower than recorded (-20.2 dBFS for a -12 dBFS
+      take at velocity 100): voice / track gain staging, not the recorder.
+  - Simulator tooling: `sim_ctl.sh turn P1..P4|JOG N` turns encoders (the sampler's Max Length
+    and the sample editor's START need them; the knobs are told apart by geometry, the jog wheel
+    being the largest); `sim_ctl.sh click` skips zero-size components (dialog contents such as
+    CREATE PROGRAM carry unused 0x0 `Apply` / `Cancel` buttons that shadowed the real ones);
+    `KICK_SIM_AUDIO_INPUT=pulse:<ms>`; `sim_sampler_looper.sh` and `wav_measure.py`.
 
 - `AudIO/AudIO/Includes/Platform.h`: adds `<thread>` and `<chrono>`, which the DAW sources use
   but never included (other platforms got them transitively).

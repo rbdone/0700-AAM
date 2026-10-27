@@ -59,6 +59,8 @@ namespace mt
     ///     tone          1 kHz sine at -12 dBFS, continuous
     ///     tone:<hz>     sine at that frequency, -12 dBFS
     ///     pulse         1 kHz bursts of 50 ms every 500 ms (120 BPM quarter notes), -6 dBFS
+    ///     pulse:<ms>    the same bursts every <ms> milliseconds (e.g. pulse:700, a period that
+    ///                   is not a divisor of the bar, so a loop's repeat is visible in the output)
     ///     <file>        a WAV/AIFF/FLAC file, looped, resampled to the engine rate
     ///
     /// The source replaces whatever the audio device delivers on every input channel, so the
@@ -78,6 +80,7 @@ namespace mt
         Kind                     kind{ Kind::tone };
         double                   sampleRate{ 48000.0 };
         double                   frequency{ 1000.0 };
+        double                   pulsePeriod{ 0.5 }; // seconds
         double                   phase{ 0.0 };
         int64_t                  position{ 0 };
         juce::AudioBuffer<float> data; // file contents at sampleRate
