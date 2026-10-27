@@ -114,8 +114,11 @@ LEDs sent by the app are shown.
   turn; the small PUSH key under the wheel is the wheel's click (ENTER). MASTER and REC are
   analogue pots on the unit and do nothing here.
 - Every pad and key is a `juce::Button` with its printed name, so the panel is scriptable through
-  macOS accessibility, e.g. from AppleScript:
-  `tell application "System Events" to tell process "KT_KickEM" to click button "Pad 1" of window 1`.
+  macOS accessibility: `Kick/tools/sim_press.sh "Pad 1" MAIN PUSH "key 45"` presses controls by
+  name while the simulator runs (transport keys are `key 42`..`key 46`). The terminal needs
+  Accessibility permission in System Settings.
+- `/goal` in Claude Code (`.claude/commands/goal.md`) is a phased plan for making every control
+  behave as on the device, starting with synthesised starter content.
 - Known limitation: the app's full-screen popups (`kick_utils_popup.cpp`) are separate desktop
   windows sized to the primary display, so they open at native size over the whole screen rather
   than inside the scaled bezel. They work, they just do not scale.
