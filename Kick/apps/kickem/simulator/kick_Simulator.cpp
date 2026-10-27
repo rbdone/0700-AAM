@@ -1,299 +1,834 @@
+/*
+ * Copyright (c) 2022 MUSIC Tribe
+ *
+ * This file is part of Kick.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/*
+ * Front-panel geometry. All numbers are canvas units (Simulator::canvasW x canvasH) taken from a
+ * top-down photo of the unit, so the simulator keeps the proportions of the hardware:
+ *
+ *   camera / MASTER / REC / LINK      display (bezel + screen)        P1..P4
+ *   slider, FULL LEVEL, 16 LEVELS,    16 pads (1 bottom-left)         BANK, function keys,
+ *   ERASE                                                              jog wheel, transport
+ */
+
 #include "kick_Simulator.h"
 
 namespace sim
 {
-#define padSpacing  20
-KickSimulatorButton::KickSimulatorButton(int p)
-    :pos(p)
-{
-}
-
-KickSimulatorButton::~KickSimulatorButton()
-{
-}
-
-void KickSimulatorButton::paint(juce::Graphics& g)
-{
-    g.setColour(juce::Colour(34, 34, 34));
-    g.fillAll();
-
-    juce::Colour clr;
-    if (mousePressed)
-        clr = padColour.withAlpha(0.75f);
-    else if (state == mt::Kick::PadButtonState::StateOff || state == mt::Kick::PadButtonState::StateOff)
-        clr = juce::Colours::transparentBlack;
-    else
-        clr = padColour;
-
-    g.setColour(clr);
-    g.drawRect(getLocalBounds(), 3);
-}
-
-void KickSimulatorButton::mouseDown(const MouseEvent&)
-{
-    if (state == mt::Kick::PadButtonState::StateOff)
-        return;
-
-    padStateChanged.emit(pos, true);
-    mousePressed = true;
-    repaint();
-}
-
-void KickSimulatorButton::mouseUp(const MouseEvent&)
-{
-    if (state == mt::Kick::PadButtonState::StateOff)
-        return;
-
-    padStateChanged.emit(pos, false);
-    mousePressed = false;
-    repaint();
-}
-
-SimulatorButtonGrid::SimulatorButtonGrid()
-{
-    padColour.resize(128, mt::Kick::PadColourIds::PadColourTrans);
-    padState.resize(128, mt::Kick::PadButtonState::StateOff);
-    auto triggerHwEvent = [this](int pos, bool pressed)
+    namespace
     {
-        std::vector<char> data(2);
-        int pad = mt::Kick::HwControlCommands::Pad1 + pos;
-        data[1] = 127; //velocity
-        if (pressed)
-            data[0] = PAD_PRESSED;
-        else
-            data[0] = PAD_RELEASED;
+        constexpr int velocityDefault = 80, aftertouch = 100;
 
-        impl->hwInputReceived.emit((mt::Kick::HwControlCommands)pad, data);
-    };
-    
-    impl = new SimulatorIntrefaceImpl();
-    for (int row = 0; row < 4; row++)
-    {
-        for (int column = 0; column < 4; column++)
+        // Colours of the unit...
+        const juce::Colour body( 0xff1e1e1e ), bodyEdge( 0xff0c0c0c ), bezel( 0xff0a0a0a ), keyFace( 0xff232323 ), keyFacePressed( 0xff383838 ), keyEdge( 0xff3c3c3c ), print( 0xffb9b9b9 ), printDim( 0xff6f6f6f );
+        const juce::Colour ledBlue( 0xff3d9bff ), ledMagenta( 0xffff3fd0 ), ledGreen( 0xff35e07a ), ledRed( 0xffff3b3b ), ledWhite( 0xfff2f2f2 ), ledCyan( 0xff5ff2ff );
+
+        // Display cut-out: the 1024x600 KickHome is scaled by `screenScale` into this rectangle.
+        constexpr int   screenX = 260, screenY = 95, screenW = 730;
+        constexpr float screenScale = screenW / 1024.f;
+        constexpr int   screenH     = (int)( 600 * screenScale + 0.5f ); // 428
+
+        CPktMgr::HWMsg_t makeMsg( CPktMgr::enumPacketType Type, int Cmd, std::vector<int> Data )
         {
-            auto& padBtn = buttons.emplace_back(std::unique_ptr<KickSimulatorButton>(new KickSimulatorButton( row * 4 + column)));
-            addAndMakeVisible(*padBtn);
-            padBtn->padStateChanged.connect(triggerHwEvent);
+            CPktMgr::HWMsg_t m;
+            m.pktType = Type;
+            m.pktCmd  = Cmd;
+            m.pktDir  = CPktMgr::EN_PKT_REQUEST;
+            m.data    = std::move( Data );
+            return m;
+        }
+
+        juce::Font panelFont( float Size, bool Bold = true )
+        {
+            return juce::Font( "Helvetica", Size, Bold ? juce::Font::bold : juce::Font::plain );
+        }
+    } // namespace
+
+    void sendButtonPacket( int Id, int BtnState )
+    {
+        SimulatorHub::get().sendToApp( makeMsg( CPktMgr::EN_PKT_TYPE_BUTTON, DCC::EN_BTN_STATUS, { Id, BtnState, velocityDefault, aftertouch } ) );
+    }
+
+    //==============================================================================================
+    juce::Colour padColourFor( int colourId )
+    {
+        switch( colourId )
+        {
+            case DCC::padColourDarkRed: return juce::Colour( 0xffb00020 );
+            case DCC::padColourVividPurple: return juce::Colour( 0xffa020ff );
+            case DCC::padColourDarkYellow: return juce::Colour( 0xffd8c000 );
+            case DCC::padColourlightGreen1: return juce::Colour( 0xff9cf29c );
+            case DCC::padColourlightGreen3: return juce::Colour( 0xff40d080 );
+            case DCC::padColourlightGreen4: return juce::Colour( 0xff00d860 );
+            case DCC::PadColourLightSkyBlue: return juce::Colour( 0xff87cefa );
+            case DCC::PadColourAqua: return juce::Colour( 0xff20f0f0 );
+            case DCC::PadColourBlue1: return juce::Colour( 0xff2f8fff );
+            case DCC::PadColourPink: return juce::Colour( 0xffffb0d0 );
+            case DCC::PadColourPink1: return juce::Colour( 0xffff60b0 );
+            case DCC::PadColourPink2: return juce::Colour( 0xffff1f8f );
+            case DCC::PadColourRed: return juce::Colour( 0xffff2a2a );
+            case DCC::PadColourOrange1: return juce::Colour( 0xffffa84a );
+            case DCC::PadColourOrange: return juce::Colour( 0xffff8c00 );
+            case DCC::PadColourNeutralWhite: return juce::Colour( 0xfff4f4f4 );
+            case DCC::PadColourNeutralGrey: return juce::Colour( 0xff9a9a9a );
+            case DCC::PadColourTrans:
+            default: return juce::Colour( 0xff2b2b2b );
         }
     }
-    
-    impl->hwMessageReceived.connect([this](int hwId, const std::vector<juce::int8>& data)
+
+    //==============================================================================================
+    KnobLookAndFeel::KnobLookAndFeel( Style S )
+        : style( S ) {}
+
+    void KnobLookAndFeel::drawRotarySlider( juce::Graphics& g, int x, int y, int width, int height, float sliderPos, float startAngle, float endAngle, juce::Slider& )
     {
-        if (!(hwId >= mt::Kick::HwControlCommands::Pad1 && hwId <= mt::Kick::HwControlCommands::Pad16))
-            return;
+        drawKnob( g, juce::Rectangle<float>( (float)x, (float)y, (float)width, (float)height ), startAngle + sliderPos * ( endAngle - startAngle ), style );
+    }
 
-        mt::Kick::PadAction pdAction = (mt::Kick::PadAction)data[0];
-        int pad = hwId - (int)mt::Kick::HwControlCommands::Pad1;
-        if (pdAction == mt::Kick::PadAction::SetPadColour)
+    void KnobLookAndFeel::drawKnob( juce::Graphics& g, juce::Rectangle<float> Area, float angle, Style style, bool glow )
+    {
+        auto       area   = Area.reduced( 2.f );
+        const auto radius = juce::jmin( area.getWidth(), area.getHeight() ) * 0.5f;
+        const auto centre = area.getCentre();
+
+        if( style == Style::Jog )
         {
-            int bank = (int)data[1];
-
-            mt::Kick::PadColourIds selPadClr = (mt::Kick::PadColourIds)data[2];
-            padColour[(rsize_t)bank * TOTAL_DRUM_PADS + pad] = (mt::Kick::PadColourIds)data[2];
-
-            if (currentBank == bank)
+            // Outer ring with red glow (the unit lights the ring around the jog wheel).
+            auto ring = juce::Rectangle<float>( radius * 2.f, radius * 2.f ).withCentre( centre );
+            g.setColour( juce::Colour( 0xff111111 ) );
+            g.fillEllipse( ring );
+            if( glow )
             {
-                for (auto& button : buttons)
-                {
-                    if (button->getPos() == pad)
-                    {
-                        button->setPadColour(mt::Kick::getPadColourFromId(selPadClr));
-                        break;
-                    }
-                }
+                g.setColour( ledRed.withAlpha( 0.55f ) );
+                g.drawEllipse( ring.reduced( radius * 0.30f ), radius * 0.08f );
+                g.setColour( ledRed.withAlpha( 0.18f ) );
+                g.drawEllipse( ring.reduced( radius * 0.24f ), radius * 0.16f );
             }
-            repaint();
+            auto knob = ring.reduced( radius * 0.40f );
+            g.setGradientFill( juce::ColourGradient( juce::Colour( 0xff3a3a3a ), knob.getX(), knob.getY(), juce::Colour( 0xff101010 ), knob.getRight(), knob.getBottom(), true ) );
+            g.fillEllipse( knob );
+            g.setColour( juce::Colour( 0xff555555 ) );
+            g.drawEllipse( knob, 1.5f );
+            // Knurl.
+            const float kr = knob.getWidth() * 0.5f;
+            for( int i = 0; i < 24; ++i )
+            {
+                const float a = angle + (float)i * juce::MathConstants<float>::twoPi / 24.f;
+                g.setColour( juce::Colour( 0xff2a2a2a ) );
+                g.drawLine( centre.x + std::sin( a ) * kr * 0.80f, centre.y - std::cos( a ) * kr * 0.80f, centre.x + std::sin( a ) * kr * 0.98f, centre.y - std::cos( a ) * kr * 0.98f, 2.f );
+            }
+            g.setColour( ledRed );
+            g.fillEllipse( juce::Rectangle<float>( 6.f, 6.f ).withCentre( { centre.x + std::sin( angle ) * kr * 0.55f, centre.y - std::cos( angle ) * kr * 0.55f } ) );
+            return;
         }
-        else if (pdAction == mt::Kick::PadAction::SetPadState)
+
+        // Pots and encoders: a dark cap with a pointer.
+        auto cap = juce::Rectangle<float>( radius * 2.f, radius * 2.f ).withCentre( centre );
+        g.setColour( juce::Colours::black.withAlpha( 0.6f ) );
+        g.fillEllipse( cap.translated( 1.5f, 2.5f ) );
+        g.setGradientFill( juce::ColourGradient( juce::Colour( style == Style::Encoder ? 0xff6a6a6a : 0xff3c3c3c ), cap.getX(), cap.getY(), juce::Colour( 0xff0e0e0e ), cap.getRight(), cap.getBottom(), true ) );
+        g.fillEllipse( cap );
+        g.setColour( juce::Colour( 0xff666666 ) );
+        g.drawEllipse( cap, 1.2f );
+        if( style == Style::Encoder )
         {
-            padState[currentBank * TOTAL_DRUM_PADS + pad] = (mt::Kick::PadButtonState)data[1];
-
-            //int startPadAndBank = (int)data[1];
-            //int ensPadAndBank = (int)data[2];
-            //for (int i = startPadAndBank; i <= ensPadAndBank; i++)
-            //    padState[i] = state;
-
-            setCurrentBank(currentBank);
+            g.setColour( juce::Colour( 0xff9a9a9a ) );
+            g.fillEllipse( cap.reduced( radius * 0.35f ) );
         }
-        else if (hwId == pdAction == mt::Kick::PadAction::SetPadState)
-        {
-            //int startPadAndBank = (int)data[0];
-            //int ensPadAndBank = (int)data[1];
-            //for (int i = startPadAndBank; i <= ensPadAndBank; i++)
-            //    padsOn[i] = false;
-            //
-            //setCurrentBank(currentBank);
-        }
-    });
-}
-
-SimulatorButtonGrid::~SimulatorButtonGrid()
-{
-}
-
-void SimulatorButtonGrid::resized()
-{
-    int buttonWidth = (int)(std::round(getWidth() - (5 * padSpacing)) / 4);
-    int buttonHeight = (int)(std::round(getHeight() - (5 * padSpacing)) / 4);
-    int yPos = getHeight() - padSpacing - buttonHeight;
-    int xPos = padSpacing;
-    
-    int pos = 0;
-    for (std::unique_ptr<KickSimulatorButton>& padBtn : buttons)
-    {
-        padBtn->setBounds(xPos, yPos, buttonWidth, buttonHeight);
-        xPos += buttonWidth + padSpacing;
-        pos++;
-        if (pos / 4 == 1)
-        {
-            yPos -= buttonHeight + padSpacing;
-            pos = 0;
-            xPos = padSpacing;
-        }
-    }
-}
-
-void SimulatorButtonGrid::setCurrentBank(int cBank)
-{
-    currentBank = cBank;
-    int buttonStartValue = cBank * 16;
-    for (auto& padButton : buttons)
-    {
-        padButton->setPadColour(mt::Kick::getPadColourFromId(padColour[buttonStartValue]));
-        padButton->setState(padState[buttonStartValue]);
-        buttonStartValue++;
+        g.setColour( style == Style::Encoder ? juce::Colour( 0xff202020 ) : juce::Colours::white );
+        g.drawLine( centre.x + std::sin( angle ) * radius * 0.35f, centre.y - std::cos( angle ) * radius * 0.35f, centre.x + std::sin( angle ) * radius * 0.92f, centre.y - std::cos( angle ) * radius * 0.92f, 2.5f );
     }
 
-    repaint();
-}
-
-void SimulatorButtonGrid::paint(juce::Graphics& g)
-{
-    g.setColour(juce::Colour(40, 39, 37));
-    g.fillAll();
-
-    g.setColour(juce::Colours::white);
-    int buttonWidth = (int)(std::round(getWidth() - (5 * padSpacing)) / 4);
-    int buttonHeight = (int)(std::round(getHeight() - (5 * padSpacing)) / 4);
-    int yPos = getHeight() - padSpacing;
-    int xPos = padSpacing;
-
-    int pos = 0;
-    for (std::unique_ptr<KickSimulatorButton>& padBtn : buttons)
+    //==============================================================================================
+    EndlessKnob::EndlessKnob( KnobLookAndFeel::Style S, float PixelsPerStep )
+        : style( S )
+        , pixelsPerStep( PixelsPerStep )
     {
-        juce::Rectangle<int> textRect(xPos, yPos, buttonWidth, 16);
-        juce::String text = juce::String().formatted("Pad %d", padBtn->pos);
-        g.drawText(text, textRect, juce::Justification::centredLeft);
+        setMouseCursor( juce::MouseCursor::UpDownLeftRightResizeCursor );
+    }
 
-        xPos += buttonWidth + padSpacing;
-        pos++;
-        if (pos / 4 == 1)
+    void EndlessKnob::paint( juce::Graphics& g )
+    {
+        KnobLookAndFeel::drawKnob( g, getLocalBounds().toFloat(), angle, style );
+    }
+
+    void EndlessKnob::mouseDown( const juce::MouseEvent& e )
+    {
+        lastPos     = e.position;
+        accumulated = 0.f;
+    }
+
+    void EndlessKnob::mouseDrag( const juce::MouseEvent& e )
+    {
+        // Up or right = clockwise, like dragging the rim of the knob.
+        const auto pixels = ( lastPos.y - e.position.y ) + ( e.position.x - lastPos.x );
+        lastPos           = e.position;
+        turn( pixels );
+    }
+
+    void EndlessKnob::mouseWheelMove( const juce::MouseEvent&, const juce::MouseWheelDetails& wheel )
+    {
+        turn( ( wheel.deltaY + wheel.deltaX ) * ( wheel.isReversed ? -1.f : 1.f ) * 60.f );
+    }
+
+    void EndlessKnob::turn( float Pixels )
+    {
+        if( Pixels == 0.f ) return;
+
+        // The pointer keeps turning for ever: one step is a small, fixed angle, and the angle wraps.
+        angle = std::fmod( angle + Pixels / pixelsPerStep * 0.12f + juce::MathConstants<float>::twoPi, juce::MathConstants<float>::twoPi );
+
+        accumulated += Pixels;
+        const int steps = (int)( accumulated / pixelsPerStep );
+        if( steps != 0 )
         {
-            yPos -= buttonHeight + padSpacing;
-            pos = 0;
-            xPos = padSpacing;
+            accumulated -= (float)steps * pixelsPerStep;
+            if( onStep ) onStep( steps );
+        }
+        repaint();
+    }
+
+    //==============================================================================================
+    PadButton::PadButton( int Index )
+        : juce::Button( "Pad " + juce::String( Index + 1 ) )
+        , index( Index )
+    {
+        setMouseCursor( juce::MouseCursor::PointingHandCursor );
+    }
+
+    void PadButton::set( int ColourId, int State )
+    {
+        colourId = ColourId;
+        state    = State;
+        repaint();
+    }
+
+    void PadButton::paintButton( juce::Graphics& g, bool, bool pressed )
+    {
+        auto       bounds = getLocalBounds().toFloat().reduced( 1.f );
+        const auto base   = padColourFor( colourId );
+        const bool lit    = state != DCC::StateOff && colourId != DCC::PadColourTrans;
+
+        // Rubber pad.
+        g.setGradientFill( juce::ColourGradient( juce::Colour( 0xff303030 ), bounds.getX(), bounds.getY(), juce::Colour( 0xff161616 ), bounds.getRight(), bounds.getBottom(), false ) );
+        g.fillRoundedRectangle( bounds, 5.f );
+
+        if( lit )
+        {
+            // Light leaks around the edge, like the unit.
+            g.setColour( base.withAlpha( pressed ? 0.95f : 0.75f ) );
+            g.drawRoundedRectangle( bounds.reduced( 1.5f ), 5.f, 3.f );
+            g.setColour( base.withAlpha( pressed ? 0.35f : 0.12f ) );
+            g.fillRoundedRectangle( bounds.reduced( 3.f ), 4.f );
+        }
+        else
+        {
+            g.setColour( juce::Colour( pressed ? 0xff6a6a6a : 0xff3a3a3a ) );
+            g.drawRoundedRectangle( bounds.reduced( 1.f ), 5.f, 1.5f );
         }
     }
-}
 
-Simulator::Simulator()
-{
-    sif = new SimulatorIntrefaceImpl;
-    const Displays::Display* primary = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
-    setBounds(primary->userArea);
+    void PadButton::send( int BtnState, int Velocity )
+    {
+        SimulatorHub::get().sendToApp( makeMsg( CPktMgr::EN_PKT_TYPE_PAD, DCC::EN_PAD_STATE, { DCC::EN_PAD1 + index, BtnState, Velocity, aftertouch } ) );
+    }
 
-    slider.setRange(1, 100, 1);
-    addAndMakeVisible(master);
-    master.setDisplayProportions(.6f, .2f, .2f);
-    master.showTitleAndValue(true, Slider::TextBoxBelow, Justification::centred);
+    void PadButton::mouseDown( const juce::MouseEvent& e )
+    {
+        velocity = juce::jlimit( 1, 127, 20 + (int)( 107.f * e.position.y / (float)juce::jmax( 1, getHeight() ) ) );
+        juce::Button::mouseDown( e );
+    }
 
-    addAndMakeVisible(rec);
-    rec.setDisplayProportions(.6f, .2f, .2f);
-    rec.showTitleAndValue(true, Slider::TextBoxBelow, Justification::centred);
-
-    addAndMakeVisible(slider);
-    addAndMakeVisible(brand);
-    addAndMakeVisible(logo);
-    addAndMakeVisible(AppHome::Instance());
-    addAndMakeVisible(pad);
-    addAndMakeVisible(mainControl);
-    addAndMakeVisible(mainControl1);
-    addAndMakeVisible(transport);
-    addAndMakeVisible(qlinks);
-    mainControl.bankChanged.connect([this](int bankEnum)
+    void PadButton::buttonStateChanged()
+    {
+        // Press / release follow the button's down state, so both the mouse and accessibility
+        // (triggerClick) drive the pad.
+        const bool down = isDown();
+        if( down != wasDown )
         {
-            int currentBank = bankEnum >= mt::Kick::HwControlCommands::BankA && bankEnum <= mt::Kick::HwControlCommands::BankD ?
-                bankEnum - mt::Kick::HwControlCommands::BankA : bankEnum  - mt::Kick::HwControlCommands::BankE;
-            pad.setCurrentBank(currentBank);
+            wasDown = down;
+            send( down ? DCC::BTN_PRESSED : DCC::BTN_RELEASED, down ? velocity : 0 );
         }
-    );
-}
+    }
 
-Simulator::~Simulator()
-{
-    AppHome::deletInstance();
-    delete sif;
-}
+    //==============================================================================================
+    SurfaceButton::SurfaceButton( const juce::String& Caption, int Id, juce::Colour LedColour, bool Toggle, Shape S, Icon I )
+        : juce::Button( Caption.isNotEmpty() ? Caption.replace( "\n", " " ) : "key " + juce::String( Id ) )
+        , caption( Caption )
+        , id( Id )
+        , ledColour( LedColour )
+        , toggle( Toggle )
+        , shape( S )
+        , icon( I )
+    {
+        setMouseCursor( juce::MouseCursor::PointingHandCursor );
+        setClickingTogglesState( Toggle );
+    }
 
-void Simulator::paint(juce::Graphics &g)
-{
-    g.setColour(juce::Colour(53, 53, 53));
-    g.fillAll();
+    void SurfaceButton::setLed( bool On )
+    {
+        if( toggle ) return; // SHIFT keeps its own state.
+        led = On;
+        repaint();
+    }
 
-    g.setColour(juce::Colour(27, 27, 27));
-    g.fillRect(getSliderRect());
-    g.fillRect(getMasterRect());
-    g.fillRect(getRecRect());
-    g.fillRect(getSliderLinkRect());
-    g.fillRect(getSliderControlsRect());
-    g.fillRect(getQlinkControlsRect());
-}
+    void SurfaceButton::buttonStateChanged()
+    {
+        // The unit reports keys on press, not on release. Following the down state means the
+        // mouse and accessibility clicks (triggerClick) behave the same.
+        const bool down = isDown();
+        if( down && !wasDown && !toggle ) sendButtonPacket( id, DCC::BTN_PRESSED );
+        wasDown = down;
+    }
 
-void Simulator::resized()
-{
-    brand.setBounds(20, 20, 275, 37);
-    logo.setBounds(20, brand.getBottom() + 10, 275, 50);
-    AppHome::Instance()->setTopLeftPosition(683, 20);
-    pad.setBounds(40, getSliderControlsRect().getBottom() + 10, 614, 490);
-    mainControl.setBounds(692, AppHome::Instance()->getBottom() + 2, 1018, 458);
-    transport.setBounds(1767, 578, 84, 437);
-    qlinks.setBounds(1753, 40, 110, 526);
+    void SurfaceButton::clicked()
+    {
+        // Toggle keys (SHIFT) report their new state; also the path taken by accessibility clicks.
+        if( toggle ) sendButtonPacket( id, getToggleState() ? DCC::BTN_PRESSED : DCC::BTN_RELEASED );
+    }
 
-    slider.setBounds(446, 40, 16, 280);
-    master.setBounds(512, 30, 148, 137);
-    rec.setBounds(512, 197, 148, 137);
+    void SurfaceButton::drawIcon( juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c ) const
+    {
+        g.setColour( c );
+        const auto cx = r.getCentreX(), cy = r.getCentreY(), s = juce::jmin( r.getWidth(), r.getHeight() ) * 0.5f;
+        juce::Path p;
+        switch( icon )
+        {
+            case Icon::Record: g.fillEllipse( juce::Rectangle<float>( s * 1.2f, s * 1.2f ).withCentre( { cx, cy } ) ); break;
+            case Icon::Overdub:
+                g.drawEllipse( juce::Rectangle<float>( s * 1.3f, s * 1.3f ).withCentre( { cx, cy } ), s * 0.22f );
+                g.fillEllipse( juce::Rectangle<float>( s * 0.5f, s * 0.5f ).withCentre( { cx, cy } ) );
+                break;
+            case Icon::Stop: g.fillRect( juce::Rectangle<float>( s * 1.1f, s * 1.1f ).withCentre( { cx, cy } ) ); break;
+            case Icon::Play:
+                p.addTriangle( cx - s * 0.5f, cy - s * 0.65f, cx - s * 0.5f, cy + s * 0.65f, cx + s * 0.7f, cy );
+                g.fillPath( p );
+                break;
+            case Icon::PlayStart:
+                p.addTriangle( cx - s * 0.75f, cy - s * 0.6f, cx - s * 0.75f, cy + s * 0.6f, cx + s * 0.25f, cy );
+                g.fillPath( p );
+                g.fillRect( juce::Rectangle<float>( cx + s * 0.4f, cy - s * 0.6f, s * 0.3f, s * 1.2f ) );
+                break;
+            case Icon::Back:
+                p.addArc( cx - s * 0.55f, cy - s * 0.55f, s * 1.1f, s * 1.1f, juce::MathConstants<float>::pi * 0.15f, juce::MathConstants<float>::pi * 1.75f, true );
+                g.strokePath( p, juce::PathStrokeType( s * 0.2f ) );
+                p.clear();
+                p.addTriangle( cx - s * 0.55f, cy - s * 0.9f, cx - s * 0.55f, cy - s * 0.2f, cx - s * 1.0f, cy - s * 0.55f );
+                g.fillPath( p );
+                break;
+            case Icon::Copy:
+                g.drawRect( juce::Rectangle<float>( cx - s * 0.6f, cy - s * 0.6f, s * 0.9f, s * 0.9f ), s * 0.15f );
+                g.drawRect( juce::Rectangle<float>( cx - s * 0.25f, cy - s * 0.25f, s * 0.9f, s * 0.9f ), s * 0.15f );
+                break;
+            case Icon::Minus: g.fillRect( juce::Rectangle<float>( s * 1.2f, s * 0.22f ).withCentre( { cx, cy } ) ); break;
+            case Icon::Plus:
+                g.fillRect( juce::Rectangle<float>( s * 1.2f, s * 0.22f ).withCentre( { cx, cy } ) );
+                g.fillRect( juce::Rectangle<float>( s * 0.22f, s * 1.2f ).withCentre( { cx, cy } ) );
+                break;
+            case Icon::None:
+            default: break;
+        }
+    }
 
-    mainControl1.setBounds(79, 395, 442 - 68, 63);
-}
+    void SurfaceButton::paintButton( juce::Graphics& g, bool, bool pressed )
+    {
+        auto       r   = getLocalBounds().toFloat().reduced( 1.f );
+        const bool lit = led || ( toggle && getToggleState() );
+        const auto c   = lit ? ledColour : ledColour.withAlpha( 0.32f );
 
-juce::Rectangle<int> Simulator::getSliderRect()
-{
-    return juce::Rectangle<int>(335, 20, 147, 324);
-}
+        if( shape == Shape::Round )
+        {
+            g.setColour( juce::Colours::black.withAlpha( 0.6f ) );
+            g.fillEllipse( r.translated( 1.f, 2.f ) );
+            g.setGradientFill( juce::ColourGradient( juce::Colour( pressed ? 0xff3a3a3a : 0xff2a2a2a ), r.getX(), r.getY(), juce::Colour( 0xff0e0e0e ), r.getRight(), r.getBottom(), true ) );
+            g.fillEllipse( r );
+            g.setColour( keyEdge );
+            g.drawEllipse( r, 1.2f );
+            if( lit )
+            {
+                g.setColour( ledColour.withAlpha( 0.25f ) );
+                g.fillEllipse( r.reduced( r.getWidth() * 0.18f ) );
+            }
+            drawIcon( g, r.reduced( r.getWidth() * 0.28f ), c );
+            return;
+        }
 
-juce::Rectangle<int> Simulator::getMasterRect()
-{
-    return juce::Rectangle<int>(502, 20, 168, 157);
-}
+        g.setColour( juce::Colours::black.withAlpha( 0.5f ) );
+        g.fillRoundedRectangle( r.translated( 0.f, 1.5f ), 4.f );
+        g.setColour( pressed ? keyFacePressed : keyFace );
+        g.fillRoundedRectangle( r, 4.f );
+        g.setColour( keyEdge );
+        g.drawRoundedRectangle( r, 4.f, 1.f );
 
-juce::Rectangle<int> Simulator::getRecRect()
-{
-    return juce::Rectangle<int>(502, 187, 168, 157);
-}
+        if( icon != Icon::None )
+        {
+            drawIcon( g, r.reduced( r.getWidth() * 0.25f ), c );
+        }
+        else
+        {
+            if( lit )
+            {
+                g.setColour( ledColour.withAlpha( 0.10f ) );
+                g.fillRoundedRectangle( r.reduced( 2.f ), 3.f );
+            }
+            g.setColour( c );
+            const auto lines = juce::StringArray::fromLines( caption ).size();
+            g.setFont( panelFont( juce::jlimit( 9.f, 13.f, r.getHeight() / ( lines > 1 ? 3.2f : 2.6f ) ) ) );
+            g.drawFittedText( caption, getLocalBounds().reduced( 3 ), juce::Justification::centred, 2, 0.9f );
+        }
 
-juce::Rectangle<int> Simulator::getSliderLinkRect()
-{
-    return juce::Rectangle<int>(502, 354, 168, 156);
-}
+        if( toggle )
+        {
+            // SHIFT has a printed line under it.
+            g.setColour( lit ? ledColour : printDim );
+            g.fillRect( r.getX() + 4.f, r.getBottom() - 3.f, r.getWidth() - 8.f, 1.5f );
+        }
+    }
 
-juce::Rectangle<int> Simulator::getSliderControlsRect()
-{
-    return juce::Rectangle<int>(40, 354, 442, 156);
-}
+    //==============================================================================================
+    Caption::Caption( const juce::String& Text, int Id, juce::Justification J )
+        : juce::Button( Text )
+        , text( Text )
+        , id( Id )
+        , just( J )
+    {
+        if( id >= 0 ) setMouseCursor( juce::MouseCursor::PointingHandCursor );
+        setInterceptsMouseClicks( id >= 0, false );
+        setTriggeredOnMouseDown( true );
+    }
 
-juce::Rectangle<int> Simulator::getQlinkControlsRect()
-{
-    return juce::Rectangle<int>(1734, 20, 147, 524);
-}
+    void Caption::paintButton( juce::Graphics& g, bool, bool )
+    {
+        g.setColour( print );
+        g.setFont( panelFont( juce::jlimit( 8.f, 12.f, (float)getHeight() * 0.85f ) ) );
+        g.drawFittedText( text, getLocalBounds(), just, 1, 0.8f );
+    }
 
-}
+    void Caption::clicked()
+    {
+        if( id >= 0 ) sendButtonPacket( id, DCC::BTN_PRESSED );
+    }
+
+    //==============================================================================================
+    Simulator::Simulator()
+    {
+        setOpaque( true );
+
+        // The real device screen, scaled into the bezel cut-out (see resized()).
+        addAndMakeVisible( kick_ui::KickHome::Instance() );
+
+        // Pads...
+        for( int i = 0; i < 16; ++i )
+            addAndMakeVisible( *pads.emplace_back( std::make_unique<PadButton>( i ) ) );
+        for( int i = 0; i < 16; ++i )
+            addCaption( juce::String( i + 1 ), -1, juce::Justification::centredLeft );
+
+        // Left column...
+        addButton( "LINK", DCC::EN_LINK, ledBlue );
+        addButton( "FULL\nLEVEL", DCC::EN_FULL_LEVEL, ledMagenta );
+        addCaption( "HALF LVL", DCC::EN_HALF_LEVEL );
+        addButton( "16\nLEVELS", DCC::EN_16LEVELS, ledMagenta );
+        addCaption( "NOTES", DCC::EN_NOTES );
+        addButton( "ERASE", DCC::EN_ERASE, ledMagenta );
+
+        // Banks...
+        const juce::Colour bankColours[4] = { ledBlue, ledRed, ledBlue, ledRed };
+        for( int b = 0; b < 4; ++b )
+        {
+            addButton( juce::String::charToString( (juce::juce_wchar)( 'A' + b ) ), DCC::EN_BANK_A + b, bankColours[b] );
+            addCaption( juce::String::charToString( (juce::juce_wchar)( 'E' + b ) ), DCC::EN_BANK_E + b );
+        }
+
+        // Function keys, row 1 and their SHIFT functions...
+        addButton( "MAIN", DCC::EN_MAINMODE, ledBlue );
+        addCaption( "GRID", DCC::EN_GRID );
+        addButton( "BROWSE", DCC::EN_BROWSE, ledMagenta );
+        addCaption( "SAVE", DCC::EN_SAVE );
+        addButton( "TRACK\nMIX", DCC::EN_TRACK_MIX, ledMagenta );
+        addCaption( "PAD MIX", DCC::EN_PAD_MIX );
+        addButton( "TRACK\nMUTE", DCC::EN_TRACK_MUTE, ledBlue );
+        addCaption( "PAD MUTE", DCC::EN_PAD_MUTE );
+        addButton( "NEXT\nSEQ", DCC::EN_NEXT_SEQ, ledBlue );
+        addCaption( "FX", DCC::EN_FX );
+
+        // Around the jog wheel...
+        addButton( "TAP\nTEMPO", DCC::EN_TAP_TEMPO, ledMagenta );
+        addCaption( "MASTER", DCC::EN_MASTER );
+        addButton( "NOTE\nREPEAT", DCC::EN_NOTE_REPEAT, ledBlue );
+        addCaption( "LATCH", DCC::EN_LATCH );
+        addButton( "MENU", DCC::EN_MENU, ledGreen );
+        addCaption( "PREFS", DCC::EN_PREF );
+        addButton( "SHIFT", DCC::EN_SHIFT, ledGreen, true );
+        addButton( "", DCC::EN_BACK, ledWhite, false, SurfaceButton::Shape::Key, SurfaceButton::Icon::Back );
+        addButton( "", DCC::EN_COPY, ledWhite, false, SurfaceButton::Shape::Key, SurfaceButton::Icon::Copy );
+        addButton( "", DCC::EN_MINUS, ledWhite, false, SurfaceButton::Shape::Key, SurfaceButton::Icon::Minus );
+        addButton( "", DCC::EN_PLUS, ledWhite, false, SurfaceButton::Shape::Key, SurfaceButton::Icon::Plus );
+        addButton( "PUSH", DCC::EN_KNOB_ENTER, ledWhite ); // the jog wheel push (ENTER); drawn as a small key under the wheel
+
+        // Function keys, row 2...
+        addButton( "STEP\nSEQ", DCC::EN_STEP_SEQ, ledMagenta );
+        addCaption( "AUTO", DCC::EN_AUTOMATION );
+        addButton( "TC", DCC::EN_TC, ledMagenta );
+        addCaption( "ON/OFF", DCC::EN_ON_OFF );
+        addButton( "SAMPLER", DCC::EN_SAMPLER, ledBlue );
+        addCaption( "LOOP", DCC::EN_LOOPER );
+        addButton( "SAMPLE\nEDIT", DCC::EN_SAMPLE_EDIT, ledMagenta );
+        addCaption( "LINK EDIT", DCC::EN_LINK_EDIT );
+        addButton( "PROG\nEDIT", DCC::EN_PROG_EDIT, ledMagenta );
+        addCaption( "MIDI CTRL", DCC::EN_MIDI_CONTROL );
+
+        // Transport...
+        addButton( "", DCC::EN_RECORD, ledWhite, false, SurfaceButton::Shape::Round, SurfaceButton::Icon::Record );
+        addButton( "", DCC::EN_OVERDUB, ledGreen, false, SurfaceButton::Shape::Round, SurfaceButton::Icon::Overdub );
+        addButton( "", DCC::EN_STOP, ledCyan, false, SurfaceButton::Shape::Round, SurfaceButton::Icon::Stop );
+        addButton( "", DCC::EN_PLAY, ledGreen, false, SurfaceButton::Shape::Round, SurfaceButton::Icon::Play );
+        addButton( "", DCC::EN_PLAYSTART, ledGreen, false, SurfaceButton::Shape::Round, SurfaceButton::Icon::PlayStart );
+
+        // Printed labels...
+        addCaption( "MASTER" );
+        addCaption( "MIN", -1, juce::Justification::centredLeft );
+        addCaption( "MAX", -1, juce::Justification::centredRight );
+        addCaption( "REC" );
+        addCaption( "MIN", -1, juce::Justification::centredLeft );
+        addCaption( "MAX", -1, juce::Justification::centredRight );
+        for( int i = 0; i < 4; ++i ) addCaption( "P" + juce::String( i + 1 ) );
+        addCaption( "BANK" );
+
+        // MASTER / REC are analogue pots on the unit; here they turn but control nothing.
+        setupPot( master, 0.8 );
+        setupPot( rec, 0.5 );
+        master.setTooltip( "Analogue master level pot on the unit: no function in the simulator" );
+        rec.setTooltip( "Analogue record level pot on the unit: no function in the simulator" );
+
+        // Q-Link encoders P1..P4 and the jog wheel: endless, like the unit. The app only ever
+        // receives a direction and a step count.
+        for( int i = 0; i < 4; ++i )
+            setupEncoder( qlinks[i], DCC::EN_KNOB_1 + i, DCC::EN_KNOB_QLINK );
+        setupEncoder( jog, DCC::EN_KNOB_CENTER, DCC::EN_KNOB_ROTARY );
+
+        // Slider: absolute, 0..100 %...
+        slider.setSliderStyle( juce::Slider::LinearVertical );
+        slider.setTextBoxStyle( juce::Slider::NoTextBox, false, 0, 0 );
+        slider.setColour( juce::Slider::trackColourId, juce::Colour( 0xff101010 ) );
+        slider.setColour( juce::Slider::backgroundColourId, juce::Colour( 0xff101010 ) );
+        slider.setColour( juce::Slider::thumbColourId, juce::Colour( 0xff2c2c2c ) );
+        slider.setRange( 0, 100, 1 );
+        slider.setValue( 100, juce::dontSendNotification );
+        slider.onValueChange = [this] {
+            SimulatorHub::get().sendToApp( makeMsg( CPktMgr::EN_PKT_TYPE_SLIDER, DCC::EN_SLIDER_TOUCH_INPUT, { (int)slider.getValue() } ) );
+        };
+        addAndMakeVisible( slider );
+
+        // Application -> surface...
+        fromAppConnection = SimulatorHub::get().fromApp.connect( [this]( CPktMgr::HWMsg_t& m ) { handleFromApp( m ); } );
+
+        // Pretend the control surface just came up: the app answers with a COMM_INIT and
+        // thereafter expects a periodic "comm live" ping.
+        startTimer( 1000 );
+
+        // Last: this triggers resized(), which needs every control above to exist.
+        setSize( canvasW, canvasH );
+    }
+
+    Simulator::~Simulator()
+    {
+        stopTimer();
+        auto& home = kick_ui::KickHome::Instance();
+        home.setTransform( {} );
+        removeChildComponent( &home );
+        for( auto* s : { &master, &rec } )
+            s->setLookAndFeel( nullptr );
+    }
+
+    SurfaceButton& Simulator::addButton( const juce::String& Caption, int Id, juce::Colour Led, bool Toggle, SurfaceButton::Shape S, SurfaceButton::Icon I )
+    {
+        auto& b = *buttons.emplace_back( std::make_unique<SurfaceButton>( Caption, Id, Led, Toggle, S, I ) );
+        buttonsById[Id] = &b;
+        addAndMakeVisible( b );
+        return b;
+    }
+
+    Caption& Simulator::addCaption( const juce::String& Text, int Id, juce::Justification J )
+    {
+        auto& c = *captions.emplace_back( std::make_unique<Caption>( Text, Id, J ) );
+        addAndMakeVisible( c );
+        return c;
+    }
+
+    void Simulator::setupPot( juce::Slider& Knob, double Value )
+    {
+        Knob.setSliderStyle( juce::Slider::RotaryHorizontalVerticalDrag );
+        Knob.setTextBoxStyle( juce::Slider::NoTextBox, false, 0, 0 );
+        Knob.setMouseDragSensitivity( 150 );
+        Knob.setRange( 0.0, 1.0, 0.01 );
+        Knob.setValue( Value, juce::dontSendNotification );
+        Knob.setLookAndFeel( &potLnf );
+        addAndMakeVisible( Knob );
+    }
+
+    void Simulator::setupEncoder( EndlessKnob& Knob, int KnobId, int Cmd )
+    {
+        Knob.onStep = [this, KnobId, Cmd]( int Steps ) { sendKnob( KnobId, Cmd, Steps ); };
+        addAndMakeVisible( Knob );
+    }
+
+    void Simulator::sendKnob( int KnobId, int Cmd, int Delta )
+    {
+        const int dir = Delta >= 0 ? DCC::EN_KNOB_CLOCKWISE : DCC::EN_KNOB_ANTICLOCKWISE;
+        SimulatorHub::get().sendToApp( makeMsg( CPktMgr::EN_PKT_TYPE_KNOBS, Cmd, { KnobId, dir, std::abs( Delta ), 0 } ) );
+    }
+
+    void Simulator::sendSystem( int Cmd, std::vector<int> Data )
+    {
+        SimulatorHub::get().sendToApp( makeMsg( CPktMgr::EN_PKT_TYPE_SYSTEM, Cmd, std::move( Data ) ) );
+    }
+
+    void Simulator::timerCallback()
+    {
+        if( commTicks == 0 )
+        {
+            sendSystem( DCC::EN_SYS_GET_SW_VER, { 0, 1 } ); // "surface firmware" 0.1
+            sendSystem( DCC::EN_SYS_CHECK_COMM_STATUS, { 1 } ); // comm init
+            startTimer( 5000 );
+        }
+        else
+        {
+            sendSystem( DCC::EN_SYS_CHECK_COMM_STATUS, { 2 } ); // comm live
+        }
+        ++commTicks;
+    }
+
+    //==============================================================================================
+    void Simulator::handleFromApp( CPktMgr::HWMsg_t& msg )
+    {
+        switch( msg.pktType )
+        {
+            case CPktMgr::EN_PKT_TYPE_PAD: handlePadMessage( msg ); break;
+            case CPktMgr::EN_PKT_TYPE_LED: handleLedMessage( msg ); break;
+            default: break; // SYSTEM (tempo, reconnect...), SLIDER LEDs, MIDI, CV: nothing to show.
+        }
+    }
+
+    void Simulator::handlePadMessage( const CPktMgr::HWMsg_t& msg )
+    {
+        const auto& d  = msg.data;
+        auto        at = [&]( size_t i, int def = 0 ) { return i < d.size() ? d[i] : def; };
+
+        switch( msg.pktCmd )
+        {
+            case DCC::EN_PAD_SET_SINGLE_PAD: // pad, state, colour
+            case DCC::EN_PAD_SET_STEP_SINGLE_PAD: // pad, state, colour, velocity
+            case DCC::EN_PAD_SET_BLINKING: // pad, state, on colour, off colour
+                if( at( 0 ) >= 0 && at( 0 ) < 16 ) pads[(size_t)at( 0 )]->set( at( 2 ), at( 1 ) );
+                break;
+
+            case DCC::EN_PAD_SET_ALL_SINGLE_COLOUR: // state, colour
+                for( auto& p : pads ) p->set( at( 1 ), at( 0 ) );
+                break;
+
+            case DCC::EN_PAD_SET_ALL_MULTI_COLOUR: // state, colour x16
+            case DCC::EN_PAD_SET_STEP_ALL_PAD: // state, colour x16, velocity x16
+                for( size_t i = 0; i < 16; ++i ) pads[i]->set( at( 1 + i ), at( 0 ) );
+                break;
+
+            case DCC::EN_PAD_SET_COLOUR_STATE: // colour x16, state x16
+                for( size_t i = 0; i < 16; ++i ) pads[i]->set( at( i ), at( 16 + i ) );
+                break;
+
+            default: break; // settings, colour mode, aftertouch: no visual.
+        }
+    }
+
+    void Simulator::handleLedMessage( const CPktMgr::HWMsg_t& msg )
+    {
+        const auto& d = msg.data;
+        if( msg.pktCmd == DCC::EN_LED_SET_SINGLE_LED || msg.pktCmd == DCC::EN_LED_BLINK_SINGLE )
+        {
+            if( d.size() >= 2 )
+                if( auto it = buttonsById.find( d[0] ); it != buttonsById.end() )
+                    it->second->setLed( d[1] != DCC::StateOff );
+        }
+        else if( msg.pktCmd == DCC::EN_LED_SET_ALL )
+        {
+            const bool on = !d.empty() && d[0] != DCC::StateOff;
+            for( auto& b : buttons ) b->setLed( on );
+        }
+    }
+
+    //==============================================================================================
+    void Simulator::paint( juce::Graphics& g )
+    {
+        g.fillAll( juce::Colours::black );
+
+        // Body.
+        auto bodyRect = getLocalBounds().toFloat().reduced( 4.f );
+        g.setColour( bodyEdge );
+        g.fillRoundedRectangle( bodyRect.expanded( 3.f ), 22.f );
+        g.setGradientFill( juce::ColourGradient( juce::Colour( 0xff232323 ), 0.f, 0.f, juce::Colour( 0xff191919 ), 0.f, (float)getHeight(), false ) );
+        g.fillRoundedRectangle( bodyRect, 20.f );
+
+        // Display bezel with the printed logos.
+        auto bezelRect = juce::Rectangle<float>( 200.f, 30.f, 840.f, 530.f );
+        g.setColour( juce::Colours::black.withAlpha( 0.5f ) );
+        g.fillRoundedRectangle( bezelRect.expanded( 2.f ), 10.f );
+        g.setColour( bezel );
+        g.fillRoundedRectangle( bezelRect, 8.f );
+        g.setColour( print );
+        g.setFont( panelFont( 22.f, false ).italicised() );
+        g.drawText( "behringer", bezelRect.withHeight( 60.f ), juce::Justification::centred );
+        g.setFont( panelFont( 20.f ) );
+        g.drawText( "KICK", bezelRect.withTop( bezelRect.getBottom() - 38.f ), juce::Justification::centred );
+
+        // Camera module (top left).
+        g.setColour( juce::Colour( 0xff0d0d0d ) );
+        g.fillRoundedRectangle( 35.f, 40.f, 130.f, 65.f, 6.f );
+        g.setColour( juce::Colour( 0xffd8b040 ) );
+        g.fillRect( 62.f, 66.f, 10.f, 12.f );
+        g.setColour( juce::Colour( 0xff203050 ) );
+        g.fillEllipse( 95.f, 58.f, 28.f, 28.f );
+        g.setColour( juce::Colour( 0xff4060a0 ) );
+        g.fillEllipse( 104.f, 67.f, 10.f, 10.f );
+
+        // MIN / MAX arcs under MASTER and REC are printed; captions do the text.
+
+        // LINK block with its four LEDs.
+        g.setColour( juce::Colour( 0xff141414 ) );
+        g.fillRoundedRectangle( 35.f, 450.f, 130.f, 110.f, 6.f );
+        for( int i = 0; i < 4; ++i )
+        {
+            g.setColour( juce::Colour( 0xff3a3a3a ) );
+            g.fillRect( 58.f + (float)i * 26.f, 466.f, 10.f, 6.f );
+        }
+
+        // Slider channel with its LED ladder.
+        g.setColour( juce::Colour( 0xff101010 ) );
+        g.fillRoundedRectangle( 25.f, 635.f, 110.f, 270.f, 8.f );
+        for( int i = 0; i < 17; ++i )
+        {
+            g.setColour( i == 2 ? ledRed : juce::Colour( 0xff444444 ) );
+            g.fillRect( 104.f, 650.f + (float)i * 15.f, i % 4 == 0 ? 12.f : 8.f, 2.f );
+        }
+
+        // BANK header line.
+        g.setColour( printDim );
+        g.fillRect( 800.f, 614.f, 185.f, 1.5f );
+        g.fillRect( 1055.f, 614.f, 155.f, 1.5f );
+
+        // Jog wheel surround (the four keys sit on it).
+        g.setColour( juce::Colour( 0xff151515 ) );
+        g.fillEllipse( 880.f, 795.f, 260.f, 260.f );
+    }
+
+    void Simulator::resized()
+    {
+        // --- Screen -----------------------------------------------------------------------------
+        auto& home = kick_ui::KickHome::Instance();
+        home.setTransform( juce::AffineTransform::scale( screenScale ).translated( (float)screenX, (float)screenY ) );
+        home.setBounds( 0, 0, 1024, 600 );
+        juce::ignoreUnused( screenH );
+
+        size_t cap = 0; // captions, in creation order
+
+        // --- Pads: pad 1 bottom-left ------------------------------------------------------------
+        for( int i = 0; i < 16; ++i )
+        {
+            const int row = 3 - i / 4, col = i % 4;
+            const int x = 175 + col * 150, y = 635 + row * 145;
+            pads[(size_t)i]->setBounds( x, y, 125, 115 );
+            captions[cap++]->setBounds( x, y + 117, 40, 14 );
+        }
+
+        // --- Left column --------------------------------------------------------------------------
+        buttonsById[DCC::EN_LINK]->setBounds( 60, 490, 80, 48 );
+        buttonsById[DCC::EN_FULL_LEVEL]->setBounds( 40, 955, 75, 50 );
+        captions[cap++]->setBounds( 25, 1010, 105, 14 ); // HALF LVL
+        buttonsById[DCC::EN_16LEVELS]->setBounds( 40, 1060, 75, 50 );
+        captions[cap++]->setBounds( 25, 1115, 105, 14 ); // NOTES
+        buttonsById[DCC::EN_ERASE]->setBounds( 40, 1170, 75, 50 );
+
+        // --- Banks --------------------------------------------------------------------------------
+        for( int b = 0; b < 4; ++b )
+        {
+            const int x = 800 + b * 115;
+            buttonsById[DCC::EN_BANK_A + b]->setBounds( x, 635, 65, 40 );
+            captions[cap++]->setBounds( x, 683, 65, 14 ); // E..H
+        }
+
+        // --- Function keys row 1 -------------------------------------------------------------------
+        const int fx[5] = { 795, 885, 975, 1060, 1150 };
+        const int row1[5] = { DCC::EN_MAINMODE, DCC::EN_BROWSE, DCC::EN_TRACK_MIX, DCC::EN_TRACK_MUTE, DCC::EN_NEXT_SEQ };
+        for( int i = 0; i < 5; ++i )
+        {
+            buttonsById[row1[i]]->setBounds( fx[i], 735, 70, 48 );
+            captions[cap++]->setBounds( fx[i] - 12, 790, 94, 14 );
+        }
+
+        // --- Around the jog wheel -----------------------------------------------------------------
+        buttonsById[DCC::EN_TAP_TEMPO]->setBounds( 795, 840, 70, 50 );
+        captions[cap++]->setBounds( 783, 896, 94, 14 ); // MASTER
+        buttonsById[DCC::EN_NOTE_REPEAT]->setBounds( 795, 945, 70, 50 );
+        captions[cap++]->setBounds( 783, 1001, 94, 14 ); // LATCH
+        buttonsById[DCC::EN_MENU]->setBounds( 1150, 840, 70, 50 );
+        captions[cap++]->setBounds( 1138, 896, 94, 14 ); // PREFS
+        buttonsById[DCC::EN_SHIFT]->setBounds( 1150, 940, 70, 60 );
+
+        jog.setBounds( 935, 850, 150, 150 );
+        buttonsById[DCC::EN_BACK]->setBounds( 892, 812, 48, 40 );
+        buttonsById[DCC::EN_COPY]->setBounds( 1080, 812, 48, 40 );
+        buttonsById[DCC::EN_MINUS]->setBounds( 892, 1000, 48, 40 );
+        buttonsById[DCC::EN_PLUS]->setBounds( 1080, 1000, 48, 40 );
+        buttonsById[DCC::EN_KNOB_ENTER]->setBounds( 985, 1012, 50, 28 ); // wheel push
+
+        // --- Function keys row 2 -------------------------------------------------------------------
+        const int row2[5] = { DCC::EN_STEP_SEQ, DCC::EN_TC, DCC::EN_SAMPLER, DCC::EN_SAMPLE_EDIT, DCC::EN_PROG_EDIT };
+        for( int i = 0; i < 5; ++i )
+        {
+            buttonsById[row2[i]]->setBounds( fx[i], 1055, 70, 50 );
+            captions[cap++]->setBounds( fx[i] - 12, 1112, 94, 14 );
+        }
+
+        // --- Transport ---------------------------------------------------------------------------
+        const int tx[5] = { 830, 920, 1010, 1100, 1185 };
+        const int tr[5] = { DCC::EN_RECORD, DCC::EN_OVERDUB, DCC::EN_STOP, DCC::EN_PLAY, DCC::EN_PLAYSTART };
+        for( int i = 0; i < 5; ++i )
+            buttonsById[tr[i]]->setBounds( tx[i] - 26, 1160, 52, 52 );
+
+        // --- Printed labels and the knobs ------------------------------------------------------------
+        captions[cap++]->setBounds( 30, 145, 120, 16 ); // MASTER
+        master.setBounds( 42, 160, 90, 90 );
+        captions[cap++]->setBounds( 38, 252, 40, 12 ); // MIN
+        captions[cap++]->setBounds( 96, 252, 40, 12 ); // MAX
+        captions[cap++]->setBounds( 30, 290, 120, 16 ); // REC
+        rec.setBounds( 42, 305, 90, 90 );
+        captions[cap++]->setBounds( 38, 397, 40, 12 ); // MIN
+        captions[cap++]->setBounds( 96, 397, 40, 12 ); // MAX
+
+        const int py[4] = { 55, 190, 310, 435 };
+        for( int i = 0; i < 4; ++i )
+        {
+            qlinks[i].setBounds( 1105, py[i], 80, 80 );
+            captions[cap++]->setBounds( 1105, py[i] + 82, 80, 14 ); // P1..P4
+        }
+        captions[cap++]->setBounds( 985, 606, 70, 16 ); // BANK
+
+        slider.setBounds( 50, 645, 48, 250 );
+    }
+
+    //==============================================================================================
+    ScaledPanel::ScaledPanel()
+    {
+        addAndMakeVisible( panel );
+        setSize( Simulator::canvasW, Simulator::canvasH );
+    }
+
+    void ScaledPanel::resized()
+    {
+        const float s = juce::jmin( (float)getWidth() / (float)Simulator::canvasW, (float)getHeight() / (float)Simulator::canvasH );
+        const float w = Simulator::canvasW * s, h = Simulator::canvasH * s;
+        panel.setTransform( juce::AffineTransform::scale( s ).translated( ( (float)getWidth() - w ) * 0.5f, ( (float)getHeight() - h ) * 0.5f ) );
+    }
+} // namespace sim

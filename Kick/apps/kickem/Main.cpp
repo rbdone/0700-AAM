@@ -1,98 +1,103 @@
 /*
-  ==============================================================================
+ * Copyright (c) 2022 MUSIC Tribe
+ *
+ * This file is part of Kick.
+ *
+ * Kick is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License as published by the Free
+ * Software Foundation, either version 3 of the License, or (at your option)
+ * any later version.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
 
-    This file contains the basic startup code for a JUCE application.
+/*
+ * KT_KickEM: the Kick software simulator.
+ *
+ * Boots exactly like the monolithic Kick application (apps/kick/Main.cpp): same audio
+ * interface, engine adapter and device adapter. The only difference is that input_events is
+ * compiled with SIM_BUILD, so instead of a serial port the control surface is the on-screen
+ * simulator around the real Kick screen (see simulator/kick_Simulator.h).
+ */
 
-  ==============================================================================
-*/
+#include "simulator/kick_Simulator.h"
 
-#include <simulator/kick_Simulator.h>
-//==============================================================================
-class KickApplication  : public juce::JUCEApplication
+#include "kick_ui/kick_ui.h"
+#include "audio_engine/audio_engine.h"
+#include "kick_device_adapter.h"
+#include "kick_audio_engine_adapter.h"
+#include "kick_audio_interface.h"
+
+class KickSimulatorApplication : public juce::JUCEApplication
 {
 public:
-    //==============================================================================
-    KickApplication() {}
+    const juce::String getApplicationName() override { return "Kick Simulator"; }
+    const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
+    bool               moreThanOneInstanceAllowed() override { return false; }
 
-    const juce::String getApplicationName() override       { return ProjectInfo::projectName; }
-    const juce::String getApplicationVersion() override    { return ProjectInfo::versionString; }
-    bool moreThanOneInstanceAllowed() override             { return true; }
-
-    //==============================================================================
-    void initialise (const juce::String& /*commandLine*/) override
+    void initialise( const juce::String& ) override
     {
-        // This method is where you should put your application's initialisation code..
+        // Same boot sequence as apps/kick/Main.cpp ...
+        audioInterface.reset( new KickAudioInterface() );
+        engineAdapter.reset( new KickAudioEngineAdapter( audioInterface ) );
+        adapter.reset( new KickDeviceAdapter() );
 
-        mainWindow.reset (new MainWindow (getApplicationName()));
+        juce::Desktop::getInstance().getMainMouseSource().enableUnboundedMouseMovement( true, true );
+        juce::Desktop::getInstance().setKioskModeComponent( nullptr );
+
+        mt::getSettings();
+        mt::getAudioInterface();
+
+        window = std::make_unique<MainWindow>( getApplicationName() );
     }
 
     void shutdown() override
     {
-        // Add your application's shutdown code here..
-
-        mainWindow = nullptr; // (deletes our window)
+        window  = nullptr;
+        adapter = nullptr;
     }
 
-    //==============================================================================
     void systemRequestedQuit() override
     {
-        // This is called when the app is being asked to quit: you can ignore this
-        // request and let the app carry on running, or call quit() to allow the app to close.
-        quit();
+        auto mgr = juce::ModalComponentManager::getInstance();
+        if( mgr->cancelAllModalComponents() )
+            juce::Timer::callAfterDelay( 100, [this] { quit(); } );
+        else
+            quit();
     }
 
-    void anotherInstanceStarted (const juce::String& /*commandLine*/) override
-    {
-        // When another instance of the app is launched while this one is running,
-        // this method is invoked, and the commandLine parameter tells you what
-        // the other instance's command-line arguments were.
-    }
+    void anotherInstanceStarted( const juce::String& ) override {}
 
-    //==============================================================================
-    /*
-        This class implements the desktop window that contains an instance of
-        our MainComponent class.
-    */
-    class MainWindow    : public juce::DocumentWindow
+    class MainWindow : public juce::DocumentWindow
     {
     public:
-        MainWindow (juce::String name)
-            : DocumentWindow (name,
-                              juce::Desktop::getInstance().getDefaultLookAndFeel()
-                                                          .findColour (juce::ResizableWindow::backgroundColourId),
-                              DocumentWindow::allButtons)
+        explicit MainWindow( const juce::String& name )
+            : DocumentWindow( name, juce::Colours::black, DocumentWindow::allButtons )
         {
-            setFullScreen(true);
-            setUsingNativeTitleBar (true);
-            setContentOwned (&siml, true);
-            setResizable (false, false);
-            setVisible (true);
+            setUsingNativeTitleBar( true );
+            setContentOwned( new sim::ScaledPanel(), true );
+
+            // Resizable, locked to the unit's proportions. Start as large as the display allows.
+            setResizable( true, true );
+            setResizeLimits( 620, 625, 2480, 2500 );
+            getConstrainer()->setFixedAspectRatio( (double)sim::Simulator::canvasW / (double)sim::Simulator::canvasH );
+            auto area = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->userArea;
+            const int h = juce::jmin( sim::Simulator::canvasH, area.getHeight() - 60 );
+            centreWithSize( juce::roundToInt( h * (double)sim::Simulator::canvasW / sim::Simulator::canvasH ), h );
+            setVisible( true );
         }
 
-        void closeButtonPressed() override
-        {
-            // This is called when the user tries to close this window. Here, we'll just
-            // ask the app to quit when this happens, but you can change this to do
-            // whatever you need.
-            JUCEApplication::getInstance()->systemRequestedQuit();
-        }
-
-        /* Note: Be careful if you override any DocumentWindow methods - the base
-           class uses a lot of them, so by overriding you might break its functionality.
-           It's best to do all your work in your content component instead, but if
-           you really have to override any DocumentWindow methods, make sure your
-           subclass also calls the superclass's method.
-        */
+        void closeButtonPressed() override { JUCEApplication::getInstance()->systemRequestedQuit(); }
 
     private:
-        sim::Simulator siml;
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( MainWindow )
     };
 
 private:
-    std::unique_ptr<MainWindow> mainWindow;
+    std::unique_ptr<MainWindow>                window;
+    std::unique_ptr<KickDeviceAdapter>         adapter;
+    std::unique_ptr<KickAudioEngineAdapter>    engineAdapter;
+    std::shared_ptr<contracts::AudioInterface> audioInterface;
 };
 
-//==============================================================================
-// This macro generates the main() routine that launches the app.
-START_JUCE_APPLICATION (KickApplication)
+START_JUCE_APPLICATION( KickSimulatorApplication )

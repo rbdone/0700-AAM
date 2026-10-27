@@ -1,25 +1,47 @@
+/*
+ * Copyright (c) 2022 MUSIC Tribe
+ *
+ * This file is part of Kick.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 #pragma once
-#include <kick_ui/kick_ui.h>
+
+#include <common/common.h>
+#include <input_events/kick_SimulatorInterface.h>
 
 namespace sim
 {
-class SimulatorIntrefaceImpl : public SimulatorInterface
-{
-public:
-    SimulatorIntrefaceImpl();
-    void* operator new(size_t s)
+    /// Single meeting point between the simulator window and the application's InputEvents.
+    ///
+    ///   window  --sendToApp()-->  every registered SimulatorInterface  -->  InputEvents::dispatchHardwareEvent
+    ///   window  <--fromApp-----   SimulatorInterfaceImpl::sendMessageToHW  <--  InputEvents::sendMessageToHardware
+    class SimulatorHub
     {
-        if (inst)
-            return inst;
-        else
-            return malloc(s);
-    }
-    void sendMessageToHW(int code, const std::vector<juce::int8>&) override;
+    public:
+        static SimulatorHub& get();
 
-SIGNALS:
-    inline static sig::Signal<int, const std::vector<juce::int8>&> hwMessageReceived = {};
+        /// Application -> simulated surface. Always emitted on the message thread.
+        sigslot::signal<CPktMgr::HWMsg_t&> fromApp;
 
-private:
-    static SimulatorIntrefaceImpl* inst;
-};
-}
+        /// Simulated surface -> application.
+        void sendToApp( CPktMgr::HWMsg_t msg );
+
+        void attach( SimulatorInterface* impl );
+        void detach( SimulatorInterface* impl );
+
+    private:
+        std::vector<SimulatorInterface*> impls;
+    };
+
+    /// The implementation input_events creates through Factory<SimulatorInterface>.
+    class SimulatorInterfaceImpl : public SimulatorInterface
+    {
+    public:
+        SimulatorInterfaceImpl();
+        ~SimulatorInterfaceImpl() override;
+
+        void sendMessageToHW( CPktMgr::HWMsg_t& msg ) override;
+    };
+} // namespace sim

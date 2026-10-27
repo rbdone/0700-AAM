@@ -6,6 +6,10 @@
 #include "contracts/dcl/dcl_contracts.h"
 #include "contracts/dcl/dcl_contracts_helper.h"
 #include "kick_SimulatorInterface.h"
+#ifdef SIM_BUILD
+    #include <map>
+    #include <common/source/kick_Factory.h> // Factory<SimulatorInterface>
+#endif
 
 #include "ComConfig.hpp"
 
@@ -306,11 +310,14 @@ namespace Controls
     void Controls::InputEvents::initialize()
     {
 #ifdef SIM_BUILD
-        //creating multiple instance of SimulatorInterface using factoty is somehow clearing the connected signals need to find the reason
-        simInterface = Factory<SimulatorInterface>::makeObject( 0 );
-        simInterface->hwInputReceived.connect( []( int id, const std::vector<char>& data ) {
-            Controls::InputEvents::dispatchHardwareEvent( id, data );
-        } );
+        // Simulator builds: the control surface is the KT_KickEM window. apps/kickem registers a
+        // SimulatorInterface implementation with the Factory; packets flow through its signal.
+        if( !simInterface )
+            simInterface = Factory<SimulatorInterface>::makeObject( 0 );
+        if( simInterface )
+            simInterface->hwInputReceived.connect( []( CPktMgr::HWMsg_t& f_HwMsg ) { Controls::InputEvents::dispatchHardwareEvent( f_HwMsg ); } );
+        else
+            juce::Logger::writeToLog( "InputEvents: no SimulatorInterface registered" );
 #else
         if( !_FPPort )
         {
@@ -357,11 +364,12 @@ namespace Controls
 
 #ifdef SIM_BUILD
         if( simInterface ) simInterface->sendMessageToHW( f_HwMsg );
-#endif
+#else
         if( _FPPort ) _FPPort->sendMessageToControlSurface( f_HwMsg );
         else
         {
             juce::Logger::outputDebugString( "Null Serial Port " );
         }
+#endif
     }
 }
