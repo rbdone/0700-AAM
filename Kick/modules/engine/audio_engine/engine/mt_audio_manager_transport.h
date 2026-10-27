@@ -78,6 +78,7 @@ namespace mt
 
     private:
         int  startPlayback( int Seq, bool Resume );
+        void defer( std::function<void()> Action ); // run on the tick thread, between two ticks
         void beginTake();
         void endTake();
 
@@ -130,6 +131,9 @@ namespace mt
         std::atomic<bool>     recordArmed{ false };
         std::atomic<bool>     recordOverdub{ false };
         std::atomic<MTTrack*> takeTrack{ nullptr };
+
+        juce::SpinLock                     deferredLock;
+        std::vector<std::function<void()>> deferred;
 
         std::thread*        tickProcessingThread;
         juce::WaitableEvent onTickEvent;

@@ -758,6 +758,14 @@ and no cmake file. Added:
     `CommonUtils::midiToGain`). TRACK MIX's program strip LEVEL wrote it but nothing read it
     (phase 5's `sim_modes.sh` "MIX levels" row: level 100 -> 50 now takes Pad 1 from -13.3 to
     -19.3 dBFS).
+  - Known issue, PAD MIX (UI, not the engine): since the pad gain is heard, `sim_modes.sh` shows
+    that after P1 -50 (pad A01 1.00 -> 0.00) the P1 +50 that restores it updates the slider on
+    screen but never calls `MTIProgram::setNoteGain` (logged: one call with 0, none with 1), so
+    pad A01 stays silent and the script's later "PAD MUTE pad 1" check fails (unmuted -120
+    dBFS); its "MIX levels" row reports `gap` because of the restore. Before the pad gain was
+    applied this was inaudible. With the merge of phase 5's pads / encoders it was consistent
+    (4 of 4 runs); before that merge the restore worked. Not investigated further (P1-P4 and
+    PAD MIX are phase 5 areas).
   - `audio_program/synth/iSynthVoice.{h,cpp}`, `DrumProgram.cpp`, `drum_voice.cpp`: a drum pad's own
     `gain` and `pan` (PAD MIX) are applied to the voice (velocity gain x pad gain; pad pan added to
     the voice pan). They were stored per CLIP and ignored.
@@ -782,6 +790,16 @@ and no cmake file. Added:
     1/n signals fired one tick late (`>` instead of `>=`); the bar-1 and beat-1 signals were
     never sent at the start (the clock never reports tick 0), so the metronome's first accent
     was missing. All fixed; the clock is stopped before it is restarted.
+  - Threads (an intermittent SIGSEGV in `MTTrack::onTick`, 1 in 3 runs of `sim_modes.sh` at
+    "NEXT SEQ pad 2"): the sequencer's ticks run on `MTAudioTransportManager::processTick`'s
+    thread, but the MIDI clock's timer thread switched sequences itself (`play( next )` at the
+    loop end for NEXT SEQ, song steps), stopping the old sequence's tracks (clearing their
+    queued note-offs) while the tick thread was iterating them; the message thread's
+    PLAY / STOP did the same. Now the clock thread only queues those changes
+    (`MTAudioTransportManager::defer`) and the tick thread runs them between two ticks, dropping
+    the tick of the old clock run; `MTTrack::play / pause / stop` and the whole of `onTick` hold
+    the track's lock; a tick of the previous clock run arriving after `play()` is ignored by the
+    sequence and the tracks instead of playing a bar of notes at once.
   - `audio_engine/engine/mt_audio_manager_transport.cpp`: PLAY START called the same `play( Seq )`
     as PLAY, which resumes when paused, so after STOP it did not go to the top
     (`startPlayback( Seq, Resume )` now). New: RECORD / OVERDUB arming and takes

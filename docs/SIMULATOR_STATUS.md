@@ -348,7 +348,7 @@ LED checks, all passed. Results and screenshots: `docs/sim_audit/phase5_pads/`.
 
 Date: 2026-10-27. `Kick/tools/sim_transport.sh` (see `docs/DEVELOPMENT.md` 4.7) checks the
 transport rows above, TAP TEMPO, BAR:BEAT:TICK, gain staging, RECORD / OVERDUB and the metronome
-on the Starter Kit and measures them on the audio probe: last run all 21 checks passed.
+on the Starter Kit and measures them on the audio probe: last run all 21 checks passed. The NEXT SEQ crash fix was checked with four `sim_modes.sh` runs (NEXT SEQ pad 2 ok in all, no crash report).
 
 - **Metronome** (top-bar Metronome button, ENABLE On): clicks 0.59-0.60 s apart at 100 BPM, the
   2 kHz accent on beat 1 of every bar including the first, 1.2 kHz on the others; ENABLE Off:
@@ -358,7 +358,13 @@ on the Starter Kit and measures them on the audio probe: last run all 21 checks 
   TRACK MIX program LEVEL and PAD MIX pad LEVEL / PAN are heard (phase 5's "MIX levels" row now
   passes: level 100 -> 50 takes Pad 1 from -13.3 to -19.3 dBFS). The playing sequence no longer
   clips. Notes were not triggered twice.
+- **Crash fixed**: the intermittent SIGSEGV in `MTTrack::onTick` when NEXT SEQ switched sequences
+  at the loop end (the clock thread stopped the old tracks while the tick thread played them);
+  sequence changes now run on the tick thread and the tracks lock (DEVELOPMENT.md 5.1).
 - **Input**: loading a project does not monitor the input (measured); `sim_launch.sh` uses a
   silent test input unless `KICK_SIM_AUDIO_INPUT` is set (`device` for the real one).
+- **Known issue**: PAD MIX P1 changes the engine's pad gain once, but the turn that restores it
+  (P1 +50 after -50) shows 1.00 on screen without reaching the engine, so pad A01 stays silent;
+  `sim_modes.sh` then fails "PAD MUTE pad 1" (4 of 4 runs on this branch; DEVELOPMENT.md 5.1).
 - **Still different**: no count-in; no TAP TEMPO LED flashing; RECORD records only notes that
   reach the selected track through the pads / MIDI (no audio-track recording).

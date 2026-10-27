@@ -714,6 +714,9 @@ namespace mt
     void MTSequence::onTick( unsigned int Ticks )
     {
         //double start = juce::Time::getMillisecondCounterHiRes();
+        // A tick of the previous clock run that arrives after play(): ignore it.
+        if( startPending.load() && Ticks > ticksPerBeat.load() )
+            return;
         // A clock restarted under us (Ticks < prevTicks) counts from zero, not from -prevTicks.
         auto diff = ( Ticks >= prevTicks.load() ) ? ( Ticks - prevTicks.load() ) : Ticks;
         prevTicks.store( Ticks );
