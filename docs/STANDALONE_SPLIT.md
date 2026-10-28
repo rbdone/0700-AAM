@@ -107,11 +107,15 @@ present, so the panel is never created.
 
   The firmware keeps only generic code that content needs: relative sample paths, and the
   metronome's fallback click with a bar accent.
-- **Branding.** `Kick/assets/Default/Sim Behringer Logo.png` was artwork the user supplied for the
-  panel. It is a third-party trademark, so the emulator does **not** commit it.
-  - The panel draws the logo only from a path the user provides (`--logo <png>`); otherwise it
-    draws nothing there.
-  - **Open question for the user**: whether shipping the logo is acceptable.
+- **Branding** (decided by the user, 2026-10-28). The emulator draws no logo or other trademark.
+  - `Kick/assets/Default/Sim Behringer Logo.png` (artwork the user supplied for the panel) is not
+    committed, and there is no `--logo` option.
+  - The area above the screen, where the unit carries its logo, is blank. Before, the panel fell
+    back to printing the word "behringer" there.
+  - Done in KickEmulator `e0cd137`.
+- **Generator licence** (decided by the user, 2026-10-28). `make_starter_kit.py` synthesises
+  everything from fixed seeds with the Python standard library and reads no input files, so the
+  script is CC0 like its output.
 
 ### 5. What leaves the firmware entirely
 
@@ -241,7 +245,7 @@ Two lines added outside these sites come with them:
 | `Kick/apps/kickem/simulator/kick_Simulator.{h,cpp}` | `panel/` | Panel geometry, drawing, SHIFT semantics, LED / pad-colour decoding. The packet encoding is factored so that the in-memory path becomes the wire path (`/goal-serial` phase 3) |
 | `Kick/apps/kickem/simulator/kick_SimControl.{h,cpp}` | split: panel commands → `panel/` control channel; screen commands → firmware `test_control` (above) | |
 | `Kick/apps/kickem/simulator/kick_SimulatorInterfaceImpl.{h,cpp}`, `Main.cpp`, `CMakeLists.txt` | dropped / rewritten as the panel's own `main` | the panel no longer links the app |
-| `Kick/assets/Default/Sim Behringer Logo.png` | not committed (trademark, see decision 4) | open question |
+| `Kick/assets/Default/Sim Behringer Logo.png` | not committed (trademark, see decision 4); the area is blank | decided |
 | `Kick/tools/sim_launch.sh`, `sim_quit.sh` (lock), `sim_ctl.sh`, `sim_turn.sh` | `kickem` launcher and `panel` control client | machine-wide lock kept |
 | `Kick/tools/sim_press.sh`, `sim_click.sh`, `sim_shot.sh`, `sim_ax.swift` | dropped (OS accessibility; the wire and test-control replace them) | |
 | `Kick/tools/sim_smoke.sh`, `sim_transport.sh`, `sim_modes.sh`, `sim_pads.sh`, `sim_sampler_looper.sh`, `sim_overlays.sh` | `checks/` (ported to the panel channel + test-control) | phase 5 |
