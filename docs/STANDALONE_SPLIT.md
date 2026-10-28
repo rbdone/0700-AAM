@@ -189,7 +189,7 @@ script whose output goes into the pull request.
 | `fix/relative-sample-paths` | `mt_audio_manager.cpp` (`resolveRelativeSamplePaths`) | was SEAM `SIM_BUILD \|\| JUCE_MAC` → **generic, unconditional**. A project may name samples relative to its folder or the samples root; absolute paths (all the device writes) untouched. Needed on Linux too (VM, Linux desktop) | `sim_smoke.sh` | planned |
 | `fix/hwpref-date-time` *(candidate)* | `hardware/source/kick_Hwpref.cpp` | Found by reading, **not observed yet**: `setDate` / `setTime` run `std::system( "2024-5-15" )` (the comment says `date -s`), so the Hardware tab cannot set the clock on the unit either. Verify in faithful mode (phase 6) before opening | phase 6 VM | planned |
 
-| `fix/shift-state` *(candidate)* | `input_events/input_events.cpp`, `contracts/dcl/dcl_contracts_helper.cpp` | Found by reading in phase 4, **not observed yet**: the serial reader stores SHIFT in `Controls::shiftBtnState` (`input_events.cpp:248`), but `DclContractsHelper::isShiftPressed()` reads a different atomic, `contracts::shiftBtnState`, which only the in-tree simulator and the keyboard map set. On the unit SHIFT-dependent behaviour (`kick_table.cpp`, `kick_padButtonGroup.cpp`: SHIFT + pad = solo) may never trigger. Observe over the wire in phase 5 before opening | phase 5 wire check | planned |
+| `fix/shift-state` | `input_events/input_events.cpp`, `contracts/dcl/dcl_contracts_helper.cpp` | Found by reading in phase 4, **observed over the wire 2026-10-28** (`feature/serialport`, `fake_mcu.py`: SHIFT down then pad 1 logs `Controls::shiftBtnState=1 DclContractsHelper::isShiftPressed()=0`): the serial reader stores SHIFT in `Controls::shiftBtnState` (`input_events.cpp:248`), but `DclContractsHelper::isShiftPressed()` reads a different atomic, `contracts::shiftBtnState`, which only the in-tree simulator and the keyboard map set. On the unit SHIFT-dependent behaviour (`kick_table.cpp`, `kick_padButtonGroup.cpp`: SHIFT + pad = solo) may never trigger. Stacked on `feature/serialport` for the wire check | `fake_mcu.py` SHIFT + pad | planned |
 
 ### SEAM: the 44 `SIM_BUILD` sites
 
@@ -309,6 +309,7 @@ drift.
 | Phase | State | Where |
 |---|---|---|
 | 0 inventory | done (2026-10-28) | this file, `6b6024ce` |
+| 3 serial port | done (2026-10-28), CI queued: POSIX `juce_serialport` written from scratch, `KICK_SERIAL_DEVICE`, serial link on macOS, round-trip test (95 checks) and pty test (29), handshake LIVE over a pty on macOS (0.47 s) and Linux arm64 (0.11 s), device default `/dev/ttymxc0` unchanged | PR #15, `feature/serialport` at `da824faa` |
 | 4 emulator repository | done (2026-10-28): AGPL `LICENSE`, layout, clean import naming `6b6024ce` (no `filter-repo`: the simulator commits also changed firmware), firmware fetch by URL / ref with `kickem::protocol` from the fetched tree, `protocol_roundtrip` passes against `kickem/main`, Starter Kit regenerates byte-identical, `kickem fetch` and the machine lock work; logo not committed | `KickEm-Tools/KickEmulator` `main` at `7395d4e` |
 
 Wire-format notes from phase 4, for the phase 5 panel:
@@ -316,3 +317,16 @@ Wire-format notes from phase 4, for the phase 5 panel:
 - The app sends its own frames without that byte.
 - A frame with no data never completes in `PushByteToRxFifo`.
 - The partial-frame buffer is a function-level `static`, shared by every `CPktMgr` in the process.
+- Added in phase 3 (`docs/DEVELOPMENT.md` section 8 on `feature/serialport`):
+  - An empty payload also spoils the next frame.
+  - A read that doesn't start with `MT`, or holds an incomplete frame, is discarded whole. A frame
+    split across two reads therefore loses itself and the frame after it.
+  - The app's receive buffer is 20 bytes with no bounds check, so a surface payload can be at most
+    20 bytes.
+  - `reconnect()` runs only on `EN_SYS_RECONNECT`. It leaves the send thread stopped (from reading
+    the code, not yet exercised), and nothing calls it on a hang-up.
+  - These are the targets for phase 5's fault test.
+- `Kick` is single-instance (`moreThanOneInstanceAllowed()` returns false): a second one exits at
+  once with no log. The emulator's machine lock must cover the plain `Kick` too.
+- Phase 1 docs gap: on bookworm without webkit, `libxi-dev` is needed, because the JUCE multitouch
+  patch includes `XInput2.h`.
