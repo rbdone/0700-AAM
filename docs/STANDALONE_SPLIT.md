@@ -185,6 +185,8 @@ script whose output goes into the pull request.
 | `fix/relative-sample-paths` | `mt_audio_manager.cpp` (`resolveRelativeSamplePaths`) | was SEAM `SIM_BUILD \|\| JUCE_MAC` → **generic, unconditional**. A project may name samples relative to its folder or the samples root; absolute paths (all the device writes) untouched. Needed on Linux too (VM, Linux desktop) | `sim_smoke.sh` | planned |
 | `fix/hwpref-date-time` *(candidate)* | `hardware/source/kick_Hwpref.cpp` | Found by reading, **not observed yet**: `setDate` / `setTime` run `std::system( "2024-5-15" )` (the comment says `date -s`), so the Hardware tab cannot set the clock on the unit either. Verify in faithful mode (phase 6) before opening | phase 6 VM | planned |
 
+| `fix/shift-state` *(candidate)* | `input_events/input_events.cpp`, `contracts/dcl/dcl_contracts_helper.cpp` | Found by reading in phase 4, **not observed yet**: the serial reader stores SHIFT in `Controls::shiftBtnState` (`input_events.cpp:248`), but `DclContractsHelper::isShiftPressed()` reads a different atomic, `contracts::shiftBtnState`, which only the in-tree simulator and the keyboard map set. On the unit SHIFT-dependent behaviour (`kick_table.cpp`, `kick_padButtonGroup.cpp`: SHIFT + pad = solo) may never trigger. Observe over the wire in phase 5 before opening | phase 5 wire check | planned |
+
 ### SEAM: the 44 `SIM_BUILD` sites
 
 | # | File | Site | Decision | Becomes | Branch | Status |
@@ -297,3 +299,16 @@ The fast-mode checks need, in the fork: the build, `feature/serialport`, `featur
 and `fix/relative-sample-paths` (Starter Kit loads). Each other check also needs the fixes it
 measures. Until a fix is merged, phase 5 runs that check against the fix branch and reports the
 drift.
+
+## Progress
+
+| Phase | State | Where |
+|---|---|---|
+| 0 inventory | done (2026-10-28) | this file, `6b6024ce` |
+| 4 emulator repository | done (2026-10-28): AGPL `LICENSE`, layout, clean import naming `6b6024ce` (no `filter-repo`: the simulator commits also changed firmware), firmware fetch by URL / ref with `kickem::protocol` from the fetched tree, `protocol_roundtrip` passes against `kickem/main`, Starter Kit regenerates byte-identical, `kickem fetch` and the machine lock work; logo not committed | `KickEm-Tools/KickEmulator` `main` at `7395d4e` |
+
+Wire-format notes from phase 4, for the phase 5 panel:
+- The app's reader expects one byte after the CRC: it reads `size + 7` bytes per frame. The panel must send a trailing `\n`.
+- The app sends its own frames without that byte.
+- A frame with no data never completes in `PushByteToRxFifo`.
+- The partial-frame buffer is a function-level `static`, shared by every `CPktMgr` in the process.
