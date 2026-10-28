@@ -312,6 +312,7 @@ drift.
 | 0 inventory | done (2026-10-28) | this file, `6b6024ce` |
 | 3 serial port | done (2026-10-28), CI queued: POSIX `juce_serialport` written from scratch, `KICK_SERIAL_DEVICE`, serial link on macOS, round-trip test (95 checks) and pty test (29), handshake LIVE over a pty on macOS (0.47 s) and Linux arm64 (0.11 s), device default `/dev/ttymxc0` unchanged | PR #15, `feature/serialport` at `da824faa` |
 | 3 desktop seams | done (2026-10-28), CI green on `e997af3f`: `ui::overlayRoot()`, list hit-testing, `mt::hw::isAvailable` + `KICK_HARDWARE` + `ui::FeatureUnavailable`, `Kick/modules/test_control` (`KICK_TEST_CONTROL`), `KICK_AUDIO_PROBE` / `KICK_AUDIO_INPUT`, `KICK_LOG_NOTES`, `Project: loaded`; `SimulatorInterface`, old `apps/kickem` and `KICK_SIMULATOR` removed. **`git grep SIM_BUILD` on the branch: 0.** Popups shown inside the app's 1024x600 window on macOS; device path unchanged with the variables unset (macOS and Linux arm64 logs) | PR #2 (draft), `feature/desktop-seams` at `e997af3f` |
+| 5a fast mode | done (2026-10-28): `kickem-panel` is its own program (only `juce_gui_basics` + the fetched ref's protocol), pty / tcp / serial transports, `kickem run --mode fast`, `checks/smoke` **passes over the wire against `integration/standalone`** (10 / 10, max -3.1 dBFS). DoD 2: sound 7.3 s after a 128 s first build (target build + 30 s). Against `kickem/main` it fails as expected (no `AudIO_juce`, no serial port) | KickEmulator `c2077d3`; firmware `integration/standalone` at `cc5fa831` |
 | 4 emulator repository | done (2026-10-28): AGPL `LICENSE`, layout, clean import naming `6b6024ce` (no `filter-repo`: the simulator commits also changed firmware), firmware fetch by URL / ref with `kickem::protocol` from the fetched tree, `protocol_roundtrip` passes against `kickem/main`, Starter Kit regenerates byte-identical, `kickem fetch` and the machine lock work; logo not committed | `KickEm-Tools/KickEmulator` `main` at `7395d4e` |
 
 Wire-format notes from phase 4, for the phase 5 panel:
@@ -342,5 +343,11 @@ Wire-format notes from phase 4, for the phase 5 panel:
   check in phase 5.
 - On Linux desktop the plain app runs `ifconfig eth0 192.168.0.1` and `timedatectl set-timezone`
   at startup: the emulator must set `KICK_HARDWARE=none` there.
+- `integration/standalone` (scratch, never merged) = `build/release-builds` + `desktop-seams` + `fix/shift-state` (brings all of `feature/serialport`) + `relative-sample-paths` + `audio-object-ids` + `engine-gain-staging` + `knob-handlers` + `ui-small` + `pad-modifiers` (the whole stacked chain) + `metronome`. Two conflicts:
+  - `docs/DEVELOPMENT.md` sections 8 and 9, between serialport and seams.
+  - `loadProject`, between relative paths and the `Project: loaded` log.
+
+  Expect both again when the PRs merge into `main`.
+- Keys that arrive while a project is loading are ignored (`RecentProject::isProjectLoading`). Checks wait for `Project: loaded` plus a settle time.
 - Phase 1 docs gap: on bookworm without webkit, `libxi-dev` is needed, because the JUCE multitouch
   patch includes `XInput2.h`.
