@@ -49,7 +49,7 @@ select_track() { # the track list clamps, so: all the way up, then down to track
 }
 
 "$TOOLS/sim_quit.sh"
-KICK_SIM_FRESH=1 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$PROBE" "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || exit 1
+KICK_SIM_FRESH=1 KICK_SIM_LOG_NOTES=1 KICK_SIM_LOG_SURFACE=1 KICK_SIM_AUDIO_INPUT=silence KICK_SIM_AUDIO_PROBE="$PROBE" "$TOOLS/sim_launch.sh" "$LOG" >/dev/null || exit 1
 trap '"$TOOLS/sim_quit.sh"' EXIT
 sleep 2
 "$C" press PUSH; sleep 4                              # Projects: load the Starter Kit
@@ -152,7 +152,7 @@ shot 24-erased
 
 #### Measurements ###########################################################################
 echo "sim_pads: measurements (probe $PROBE)"
-python3 - "$PROBE" "$OUT/marks.txt" "$TOOLS/wav_measure.py" <<'EOF' || FAIL=1
+python3 - "$PROBE" "$OUT/marks.txt" "$TOOLS/wav_measure.py" "$LOG" <<'EOF' || FAIL=1
 import sys, numpy as np
 src = open(sys.argv[3]).read().replace('\nmain()\n', '\n'); ns = {}; exec(src, ns)
 x, sr = ns['read_wav'](sys.argv[1])
@@ -220,9 +220,33 @@ if len(nt) >= 3:
 else:
     check('NOTES: pads play', False, f'{len(nt)} onsets')
 
+def hf_db(k, cut=6000.0):
+    """Energy above `cut` Hz (dB) in the window. The closed hats carry about 60 % of it on the
+    Drums track (the snare and claps the rest), so erasing pad 3 lowers it by 4-5 dB. Onset counts
+    are not reliable here: the hats land on the kick and snare hits and merge into their onsets."""
+    a, b = window(k); seg = x[int(a * sr):int(b * sr)].mean(axis=1)
+    if len(seg) < 1024: return -200.0
+    spec = np.abs(np.fft.rfft(seg * np.hanning(len(seg)))) ** 2
+    f = np.fft.rfftfreq(len(seg), 1 / sr)
+    return 10 * np.log10(max(spec[f >= cut].sum(), 1e-20))
+def played(k, note):  # Drums track only
+    """Notes the sequencer played for `note` between the log markers (KICK_SIM_LOG_NOTES)."""
+    i = order.index(k); end = order[i + 1] if i + 1 < len(order) else None
+    inside, count = False, 0
+    for line in open(sys.argv[4], errors='replace'):
+        if line.startswith('SimControl: echo MARK '):
+            name = line.split()[-1]
+            if name == k: inside = True
+            elif inside and name == end: break
+        elif inside and line.startswith("SimNote: track 'Drums'") and f' note {note} ' in line:
+            count += 1
+    return count
 n1, n2, n3 = (len(onsets(k)) for k in ('play1', 'play2', 'play3'))
-check('ERASE + pad removes that pad\'s hits from playback', n1 >= 8 and n2 < n1 and n3 == 0,
-      f'onsets in 2 bars: {n1} before, {n2} after ERASE + Pad 3 (hats), {n3} after ERASE + all pads')
+h1, h2 = hf_db('play1'), hf_db('play2')
+p1, p2 = played('play1', 2), played('play2', 2)
+check('ERASE + pad removes that pad\'s hits from playback', p1 > 0 and p2 == 0 and h2 < h1 - 3 and n3 == 0,
+      f'pad 3 (hat, note 2) played {p1} times before, {p2} after ERASE + Pad 3; energy above 6 kHz '
+      f'{h1:.1f} -> {h2:.1f} dB; onsets {n1} before, {n3} after ERASE + all pads')
 sys.exit(0 if ok else 1)
 EOF
 
