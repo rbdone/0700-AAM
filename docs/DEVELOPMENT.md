@@ -123,7 +123,7 @@ LEDs sent by the app are shown.
   behave as on the device (section 7 says how far it got). `/goal-serial` and `/goal-vm` are the
   follow-ons: the device's real serial path against the simulated panel, then the Linux build in
   an ARM virtual machine. `/goal-standalone` absorbs both: it moves the simulator out into its
-  own repository (`KickEm-Tools/KickStandaloneEmulator`) that builds and runs any fork, and lands
+  own repository (`KickEm-Tools/KickEmulator`) that builds and runs any fork, and lands
   the firmware changes in `KickEm-Tools/0700-AAM`, to be proposed upstream from there.
 - Popups follow the screen. On the unit the Kick screen is the whole display, so the app puts
   its full-screen popups (dialogs, the loading spinner: `kick_utils_popup.cpp`) and notification

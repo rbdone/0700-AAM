@@ -1,5 +1,5 @@
 ---
-description: Turn the in-tree KT_KickEM simulator into a separate project, KickEm-Tools/KickStandaloneEmulator, that builds and runs any fork of the 0700-AAM firmware without simulator code inside it. Lands the firmware changes in KickEm-Tools/0700-AAM, then proposes them to MusicTribeOpenSource. Optional argument: a phase number to work on only that phase.
+description: Turn the in-tree KT_KickEM simulator into a separate project, KickEm-Tools/KickEmulator, that builds and runs any fork of the 0700-AAM firmware without simulator code inside it. Lands the firmware changes in KickEm-Tools/0700-AAM, then proposes them to MusicTribeOpenSource. Optional argument: a phase number to work on only that phase.
 ---
 
 # Goal: a standalone emulator for any 0700-AAM fork
@@ -28,7 +28,8 @@ simulator only exists inside one branch of one fork, compiled into the firmware 
   - `rbdone/0700-AAM`, branch `rbdone/goal-simulator-controls`, is all the work so far: the macOS
     build, the simulator, `/goal` phases 1-7 and the later fixes. It is the source material for
     this goal. Keep it as the record and do not rewrite or delete it.
-  - `KickEm-Tools/KickStandaloneEmulator` does not exist yet. Phase 4 creates it.
+  - `KickEm-Tools/KickEmulator` is the emulator's repository. The user created it (public, empty:
+    no commits, no licence, no description, when this plan was written). Phase 4 fills it.
 - **Upstream does not build as published.** The release is missing `AudIO_juce` (`mt::AudioDevice`,
   `ADSR`, `Filter`, `Recorder` / `SampleRecorder` / `Looper`) and `AudIO_constants.h`. The work
   branch reconstructs them, which accounts for 12 new files. It also has the build fixes in
@@ -80,7 +81,7 @@ Say what each mode cannot tell you wherever results are reported.
    - Device behaviour changes only through deliberate fix pull requests, each with the
      observation that motivated it.
 2. **The emulator repository exists and works.**
-   - `KickEm-Tools/KickStandaloneEmulator` is AGPL-3.0-or-later.
+   - `KickEm-Tools/KickEmulator` is AGPL-3.0-or-later.
    - One command (for example `./kickem run --firmware <repo url> --ref <branch> [--mode fast|vm]`)
      fetches that ref, builds it, starts the panel and the firmware, and connects them.
    - On an Apple Silicon Mac, the default fork, fast mode: sound out of the Starter Kit within
@@ -134,8 +135,8 @@ Git and GitHub, for this goal:
   once per batch. Never push to `kickem/main` directly. Never force-push a shared branch.
 - **Upstream.** Never push to `MusicTribeOpenSource`. Upstream pull requests are opened from
   `kickem` topic branches, only after the user approves each one (phase 8).
-- **Emulator repository.** Push to `KickEm-Tools/KickStandaloneEmulator` freely once it exists.
-  Use pull requests there too once CI exists.
+- **Emulator repository.** Push to `KickEm-Tools/KickEmulator` freely until its CI exists, then
+  use pull requests there too.
 - **The other goals.** When `/goal-serial` or `/goal-vm` work is done as part of this goal,
   their "Do not push" line is superseded by these rules.
 
@@ -212,8 +213,10 @@ output.
 
 ### Phase 4: the emulator repository
 
-1. Confirm with the user, then create `KickEm-Tools/KickStandaloneEmulator`: public unless the
-   user says otherwise, with a description, AGPL-3.0-or-later `LICENSE`, and a README stub.
+1. Check the state of `KickEm-Tools/KickEmulator` first: it was created empty, but others may
+   have pushed since. Build on whatever is there, and never overwrite it. Give it an
+   AGPL-3.0-or-later `LICENSE`, a README stub, and a one-line repository description
+   (`gh repo edit`).
 2. Lay it out, roughly:
    - `panel/`: the front panel, from `Kick/apps/kickem/simulator`;
    - `transport/`: pty, tcp, serial;
@@ -307,7 +310,6 @@ Once phase 5 parity holds:
 - **Destructive actions.** No force-pushes to shared branches, no deleting branches others
   created, and no rewriting `rbdone/goal-simulator-controls`.
 - **Outward-facing actions need the user's go-ahead:**
-  - creating the emulator repository;
   - merging into `kickem/main` (ask per batch);
   - every upstream pull request;
   - publishing releases.
