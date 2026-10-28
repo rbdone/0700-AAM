@@ -119,8 +119,10 @@ LEDs sent by the app are shown.
   macOS accessibility: `Kick/tools/sim_press.sh "Pad 1" MAIN PUSH PLAY GRID` presses controls by
   name while the simulator runs; a caption name such as GRID is performed as SHIFT + key. The
   terminal needs Accessibility permission in System Settings.
-- `/goal` in Claude Code (`.claude/commands/goal.md`) is a phased plan for making every control
-  behave as on the device, starting with synthesised starter content.
+- `/goal` in Claude Code (`.claude/commands/goal.md`) is the phased plan that made every control
+  behave as on the device (section 7 says how far it got). `/goal-serial` and `/goal-vm` are the
+  follow-ons: the device's real serial path against the simulated panel, then the Linux build in
+  an ARM virtual machine.
 - Known limitation: the app's full-screen popups (`kick_utils_popup.cpp`) are separate desktop
   windows sized to the primary display, so they open at native size over the whole screen rather
   than inside the scaled bezel. They work, they just do not scale.
@@ -152,6 +154,7 @@ Everything a check needs is in `Kick/tools/` and works from any directory:
 | `sim_turn.sh P1..P4\|JOG STEPS`, `sim_turn.sh SLIDER V` | Shorthand for `sim_ctl.sh turn` / `slider`: the encoders and the slider are not buttons, so `sim_press.sh` cannot reach them. Each detent is one `EN_PKT_TYPE_KNOBS` packet of magnitude 1 (cmd `EN_KNOB_QLINK` for P1-P4, `EN_KNOB_ROTARY` for the jog wheel), sent through the knob's own `onStep`, the same path as a mouse drag; positive is clockwise. The slider sends one `EN_PKT_TYPE_SLIDER` / `EN_SLIDER_TOUCH_INPUT` packet with the absolute value. (Arrow up/down in 4.3 also turn the jog wheel, but only while the window has keyboard focus.) |
 | `sim_ctl.sh down NAME [VEL]`, `up NAME`, `hold NAME SECS [VEL]` | Hold a pad or key (section 4.9): `down` presses it and leaves it pressed, `up` releases it, `hold` does both with SECS in between and answers after the release. Pads take a velocity (1-127; the default is the pad's last one, 100 at start), e.g. `hold "Pad 1" 0.1 30` is one soft hit; `down ERASE`, `press "Pad 3"`, `up ERASE` is ERASE + pad. Packets are sent directly (no mouse state), so it works with the screen locked. |
 | `sim_ctl.sh repeat MS N NAME`, `clickat NAME FX FY`, `status` | `repeat` presses a panel control N times MS ms apart on an absolute schedule timed inside the app (TAP TEMPO at a known tempo); `clickat` touches a titled component at a fraction of its size (the On half of the METRONOME dialog's ENABLE: `clickat ENABLE 0.75 0.6`); `status` prints the engine's transport state, BAR:BEAT:TICK (1-based, as on screen), master BPM, the MIDI clock's tempo, the record mode and the metronome switch, e.g. `playing bbt=1:03:068 bpm=120 clock=120.0 rec=off metronome=off` (section 4.7). |
+| `sim_smoke.sh [--no-build] [OUTDIR]` | The smoke test (section 4.10): build, boot, load the Starter Kit with PUSH, play four bars, stop; fails if the engine stays silent, clips, or the LED feedback does not arrive. |
 | `sim_pads.sh [OUTDIR]` | The phase 5 check for pads, modifiers, encoders and the slider (section 4.9). |
 | `sim_transport.sh [OUTDIR]` | The phase 3 check (section 4.7): transport keys, BAR:BEAT:TICK, gain staging, RECORD / OVERDUB, TAP TEMPO and the metronome, measured on the audio probe. |
 | `sim_sampler_looper.sh [OUTDIR]` | The phase 4 check (section 4.6): sampler record / preview / save to a pad / trim, and looper record / loop / overdub, measured on the audio probe. |
@@ -177,6 +180,7 @@ Opt-in environment variables, all off by default:
 |---|---|
 | `KICK_SIM_AUDIO_PROBE=<file.wav>` | `mt::AudioDevice` writes the engine's master output to that WAV (32-bit float) and logs `AudioProbe: t=<n>s peak=<x>dBFS rms=<y>dBFS` once per second of audio. Silence logs `-120.0dBFS`. |
 | `KICK_SIM_AUDIO_INPUT=silence`, `tone`, `tone:<hz>`, `pulse`, `pulse:<ms>`, `<file>` or `device` | `sim_launch.sh` sets `silence` when the variable is unset (see 4.7, "Input and feedback"); `device` keeps the real input. `mt::AudioDevice` replaces the device input (every channel) with a test source: digital silence (use it on laptop speakers, see 4.4), a -12 dBFS sine (1 kHz by default), 50 ms 1 kHz bursts every 500 ms (or every `<ms>`) at -6 dBFS, or a looped audio file. The pulse train is counted in engine samples, so its onsets are exact in the probe. Use a period that does not divide the bar (e.g. `pulse:700`) to see a loop repeat: the pattern then repeats with the loop length, not the pulse period. Logged as `TestInput: ...`. |
+| `KICK_SIM_FRESH=1` | `sim_launch.sh` first restores `Kick/build/demos` and `Kick/build/templates` from `Kick/demos` and `Kick/templates`. SAVE writes into those build copies, so without it one check's saved state (for example a pad level of 0) leaks into the next run. The check scripts set it. |
 | `KICK_SIM_CONTROL=<file>` | The simulator polls `<file>` for `sim_ctl.sh` commands (see above). `sim_launch.sh` sets it to `Kick/build/.sim_ctl`; without it nothing is polled. |
 | `KICK_SIM_LOG_NOTES=1` | The sequencer logs every note it plays: `SimNote: track 'Drums' tick 0 pos 0 note 0 velocity 94 id 1` (tick from the clock, position in the track, effective note and velocity, note id). `SIM_BUILD` only. |
 | `KICK_SIM_LOG_SURFACE=1` | The simulated surface logs every packet the app sends it: `SimSurface: LED cmd=0 data=44,1` (type, command, payload). LED commands are `DeviceControlContracts::LedCmd` (0 = set single LED: id, state), pad commands `PadCmd`. |
@@ -635,6 +639,42 @@ LATCH 25, GRID 9, ...) lights the key it is printed under while either LED is on
 ladder shows the app's `SLIDER cmd=1/2` value (the touched control's value, or MAIN's track
 meter); `PAD cmd=9/10` step colours are dimmed by their velocity, so 16 LEVELS shows its levels.
 
+### 4.10 Smoke test (phase 7)
+
+`Kick/tools/sim_smoke.sh` is the one command that says whether the simulator still plays:
+
+```sh
+Kick/tools/sim_smoke.sh                # builds KT_KickEM first
+Kick/tools/sim_smoke.sh --no-build /tmp/smoke
+```
+
+It configures `Kick/build` if needed (honouring `CPM_SOURCE_CACHE`), builds `KT_KickEM`, moves
+`Kick/build/prefs` aside so the jog wheel's selection starts on the first tile, and launches with
+`KICK_SIM_FRESH=1`, silent input, the audio probe and the surface trace. Then it:
+
+1. waits for the handshake (`Send Comm Live`);
+2. presses PUSH and waits for `SimProject: loaded .../Starter Kit` (a `SIM_BUILD` log line in
+   `MTAudioManager::loadProject`);
+3. checks the pad colours arrived (`SimSurface: PAD cmd=6`) and the output is silent;
+4. presses PLAY, waits four bars at the project's tempo, takes a screenshot, presses STOP.
+
+It passes when: the PLAY and STOP LED packets were sent; every whole second of the four bars
+peaks above -40 dBFS; nothing peaks above 0 dBFS; the output is silent after STOP; and the app is
+still running. It prints one PASS / FAIL line per check, leaves `sim.log`, `probe.wav` and
+screenshots in OUTDIR (default `Kick/build/logs/smoke`), puts the preferences back, and exits 1
+on any failure. A run takes about 25 s after the build. Last result (2026-10-28): 10 / 10, peak
+-3.2 to -3.3 dBFS while playing.
+
+Screenshots from that run: `docs/sim_audit/phase7_smoke/loaded.png` and `playing.png`.
+
+The deeper checks are `sim_transport.sh` (4.7), `sim_modes.sh` (4.8), `sim_pads.sh` (4.9) and
+`sim_sampler_looper.sh` (4.6). Each takes a few minutes and waits for the simulator lock, so run
+them one after another:
+
+```sh
+for t in smoke transport modes pads sampler_looper; do Kick/tools/sim_$t.sh || echo "FAILED: $t"; done
+```
+
 ## 5. What had to change to make the public release build
 
 The release notes say the build "will not work out of the box". This is the complete list of
@@ -865,8 +905,9 @@ the stub emits a compiler warning in non-simulator Linux builds so this cannot b
   empty `<ROOT>` documents, and keygroup programs stay silent: `KeygroupProgram::noteOn` is a stub
   in this release.
 - The cross-compilation SDK: device builds still need the Buildroot SDK as described in
-  `Kick/README.md`. None of the desktop changes alter the device code paths, except the serial
-  stub (5.2), which must be replaced for a device build.
+  `Kick/README.md`. The serial stub (5.2) must be replaced for a device build (`/goal-serial`).
+  The build fixes in 5.1-5.3 leave the device code paths alone, but the `/goal` work changed shared
+  app and engine code that the device runs too; section 7 lists it.
 
 ## 6. Troubleshooting
 
@@ -882,3 +923,99 @@ the stub emits a compiler warning in non-simulator Linux builds so this cannot b
   the macOS output device.
 - **Re-downloading JUCE every time**: keep the default CPM cache (`0700-AAM/.3rdPartySourceCache`)
   or set `-DCPM_SOURCE_CACHE=<dir>` consistently.
+
+## 7. What works in the simulator, and what is still different (2026-10-28)
+
+### Works
+
+Started from `Kick/build` with no hardware, on a fresh checkout:
+
+- **Sound out of the box.** The Projects screen offers the synthesised Starter Kit first (4.4).
+  PUSH loads it. Pads 1-16 in bank A play 16 drum sounds, banks B-D play keys, bass and loops.
+  The engine plays to the default output device (logged as `AudioDevice: using '...'`), and the
+  probe measures what it plays.
+- **Transport.**
+  - PLAY resumes and PLAY START plays from the top; STOP stops.
+  - RECORD and OVERDUB capture pad hits into the selected track, with Timing Correct applied.
+  - BAR:BEAT:TICK runs, TAP TEMPO sets the tempo, and the metronome clicks with an accent on
+    the bar (4.7).
+- **Every panel key and SHIFT function** does its job:
+  - Every mode key, mixer and mute, NEXT SEQ, TC / ON/OFF, MASTER, SAVE and BACK.
+  - The bank keys with pad colours, FULL / HALF LEVEL, 16 LEVELS, NOTE REPEAT / LATCH, NOTES,
+    ERASE and COPY.
+  - The jog wheel, PUSH, + / -, P1-P4 where the screen assigns them, and the slider on the touched
+    control (4.8, 4.9).
+- **Sampler, sample edit and looper.** Recording works from a test input, as do trimming,
+  assigning the take to a pad and playing it. The looper records, overdubs and loops in time
+  (4.6).
+- **Hardware-only screens** open, say "Not available in the simulator", and close (4.5).
+- **Scripted.** `sim_smoke.sh` and the four deeper checks pass (4.10).
+  `docs/SIMULATOR_STATUS.md` has the control-by-control status.
+
+### Still different from the unit
+
+- **Content.** Only the synthesised Starter Kit has sounds. The factory demos and templates are
+  empty, banks E-H are empty, the Myriad Pro font is missing, and keygroup programs are silent
+  (`KeygroupProgram::noteOn` is a stub in this release).
+- **Missing in the release's own code.** These are absent on the device as well:
+  - AUTO: there is no automation engine.
+  - FX: the XY view is not connected to audio.
+  - PROG EDIT assigns nothing to the Q-Links.
+  - LINK shows no visible page change.
+  - There is no count-in, no tempo-synced TAP TEMPO LED, and no audio-track recording.
+- **Inferred, not checked on a unit:**
+  - ERASE + pad erases all of that pad's notes.
+  - LATCH latches the repeat.
+  - FULL / HALF LEVEL start off.
+  - Only ERASE and NOTE REPEAT report releases.
+  - The PAD MIX row fix (`docs/SIMULATOR_STATUS.md`, "Open gaps").
+- **Hardware.**
+  - **No hardware behind these screens:** Wi-Fi, Ethernet, CV / Gate, firmware update, SD / USB
+    storage and the camera have nothing to drive in the simulator.
+  - **Analogue controls:** the MASTER and REC pots do nothing.
+  - **Audio device:** audio goes through the Mac's default device at 48 kHz in 480-sample
+    blocks, not the unit's codec, so latency and CPU load say nothing about the unit.
+  - **Microcontroller path:** the panel hands packets to the app in memory. The serial framing,
+    CRC and `juce_serialport` (a stub) are not exercised; `/goal-serial` covers them.
+  - **Linux paths:** the device's Linux code paths (`/app`, systemd, Weston, overlay mounts) are
+    not compiled on macOS; `/goal-vm` covers them.
+- **Simulator limits.** Popups open as separate windows at native size, not inside the scaled
+  bezel. Only one simulator runs per machine.
+
+### Shared code that changed device behaviour
+
+These changes are in code the device runs (not behind `SIM_BUILD`). Each was made because the
+control did nothing, crashed or sounded wrong in the simulator, and the device build compiles
+the same code. Review them before a device release:
+
+- **Engine gain** (phase 3):
+  - The drum voice no longer applies the program's gain and pan twice.
+  - The velocity-to-pan default is now centre (64), where 1 put every drum hit hard left.
+  - Program level, track level and pad gain / pan are applied.
+  - The shared silent sample is no longer filtered in place, which caused a burst at the end of
+    drum hits.
+- **Sequencer** (phase 3):
+  - PLAY START after STOP plays from the top.
+  - Notes at tick 0 and the bar-1 accent play.
+  - Bar and beat signals are no longer one tick late.
+  - `play()` resets its counters.
+  - Sequence changes run on the tick thread, which fixes the NEXT SEQ crash.
+  - The metronome applies MODE and LEVEL.
+- **New key handlers** (phases 3 and 5):
+  - TAP TEMPO, RECORD, OVERDUB, TC, ON/OFF, MASTER, BACK (`KickHome`), and `TimingCorrect`.
+  - The pad modifiers in `kick_ui/dialogs/kick_PadModifiers`: FULL / HALF LEVEL, 16 LEVELS,
+    NOTE REPEAT, LATCH, ERASE + pad.
+- **Fixes in existing handlers** (phases 2 and 5):
+  - Crash guards for P1 in NEXT SEQ, TRACK MIX, PAD MIX and LIST EDIT.
+  - The PAD MIX row off-by-one.
+  - The LOOPER LED is switched off.
+  - The FULL LEVEL LED follows its state at project load.
+  - PROG EDIT no longer treats Q-Link packets as pad hits.
+  - GRID ERASE acts on the press only.
+  - PUSH on the Projects screen loads the selected demo or template (it loaded an empty project).
+  - The metronome falls back to the starter click set when the factory click is missing.
+- **Knob routing** (2026-10-28): P1-P16 go to the screen, not to a focused control, unless a
+  modal popup is open.
+- **AudIO** (phase 4): one program-wide `AudioObject` id counter, where each module had its own
+  and ids collided. `mt::Recorder` and `mt::Looper` (reconstructed) set their routing id and were
+  reworked (5.1).

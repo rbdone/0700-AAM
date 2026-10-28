@@ -1,7 +1,27 @@
 # Simulator status: every panel control
 
 This file records, control by control, what the KT_KickEM simulator does today compared with
-the device. It is the Phase 1 audit of `.claude/commands/goal.md`. Date: 2026-10-27.
+the device. It started as the Phase 1 audit of `.claude/commands/goal.md` (2026-10-27, an empty
+project); every later phase updated the rows it changed, and the "Open gaps" section near the end
+is current as of 2026-10-28.
+
+## Current status (2026-10-28)
+
+On a fresh build with the synthesised Starter Kit project (`docs/DEVELOPMENT.md` 4.4), every
+check script passes:
+
+| Script | What it proves | Last run |
+|---|---|---|
+| `Kick/tools/sim_smoke.sh` | Boot, handshake, PUSH loads Starter Kit, four bars play and stop, LEDs, no clipping | 10 / 10 |
+| `Kick/tools/sim_transport.sh` | PLAY / PLAY START / STOP, BAR:BEAT:TICK, RECORD, OVERDUB, TAP TEMPO, metronome, gain staging | 21 / 21 |
+| `Kick/tools/sim_modes.sh` | Every function key and SHIFT function, mixers, mutes, NEXT SEQ, TC, MASTER, SAVE, no crash on an empty project | 50 / 50 |
+| `Kick/tools/sim_pads.sh` | Banks, FULL / HALF LEVEL, 16 LEVELS, NOTE REPEAT, LATCH, NOTES, ERASE, COPY, BACK, jog, + / -, P1-P4, slider | 25 / 25 |
+| `Kick/tools/sim_sampler_looper.sh` | Sampler record, sample edit trim, pad assignment, looper record / overdub / loop in time | pass |
+
+Of the controls in the tables below, everything is **works** except: LINK (no visible Q-Link
+page change), AUTO (no automation engine in this release), FX (the XY view is not connected to
+audio in this release), P1-P4 in PROG EDIT (the screen assigns them nothing), and the rows marked
+"not re-checked". The remaining differences from the unit are listed under "Open gaps".
 
 How it was produced: `KT_KickEM` was built from this branch (`docs/DEVELOPMENT.md` section 3) and
 run with `Kick/tools/sim_launch.sh` and `KICK_SIM_LOG_SURFACE=1` and `KICK_SIM_AUDIO_PROBE=<wav>`.
@@ -122,14 +142,14 @@ only controls that do something at boot.
 
 | Control | Packet id | Handler(s) | Device behaviour | Observed in simulator | Status | Gap class |
 |---|---|---|---|---|---|---|
-| Pads 1-16 on MAIN | PAD `EN_PAD1`..`EN_PAD16` (0-15) | `KickHomeListView` / `kick_AppMainMode.cpp` → `ae.addLiveMidiMsg` note on/off on the selected track | Plays the pad's sound and lights it in the program's pad colour. | Press and release each logged `In Recent Prj register handle command`. No pad LED, no audio (probe silent), screen unchanged. Not observed: `addLiveMidiMsg` returns early without a selected track. | missing | content |
-| Pad in BROWSE | PAD 0 | `fileBrowser::handleCommand` | Auditions the selected file on the pad and highlights the pad. | Pad highlight sent: `PAD cmd=1 data=0,1,3`. Nothing to audition. | partial | content |
+| Pads 1-16 on MAIN | PAD `EN_PAD1`..`EN_PAD16` (0-15) | `KickHomeListView` / `kick_AppMainMode.cpp` → `ae.addLiveMidiMsg` note on/off on the selected track | Plays the pad's sound and lights it in the program's pad colour. | Phase 2 (Starter Kit): the probe goes from -120 dBFS to 16 distinct hits; pad colours `PAD cmd=6 data=12,13,14,9,...`. Since phase 3's gain fix Pad 1 is centred at -13.3 dBFS (velocity 100). Phase 1 (empty project): no sound, nothing to play. | works | none |
+| Pad in BROWSE | PAD 0 | `fileBrowser::handleCommand` | Auditions the selected file on the pad and highlights the pad. | Phase 1: pad highlight sent, `PAD cmd=1 data=0,1,3`; there was nothing to audition. Not re-checked with the Starter Kit. | partial (not re-checked) | none known |
 | Pads in NOTES (Pad Perform) | PAD 0 | `PadPerform::handleCommand` | Plays a scale or chord note per pad (Chromatic by default). | Phase 5: on the Starter Kit's Keys track, pads 1 / 2 / 13 play 130.8 / 138.8 / 261.7 Hz (C3, C#3, C4: chromatic, pad 13 an octave up), measured by `sim_pads.sh`. FULL / HALF LEVEL and NOTE REPEAT apply here too. | works | none |
-| Pads in TRACK MUTE / PAD MUTE | PAD 0 | `KickPadButtonGroupComponent` (`kick_padButtonGroup.cpp`) → `triggerClick` | Toggles mute (or solo with SHIFT) of the track or pad. | Packet logged. No change; the screens say "PAD MUTE IS NOT AVAILABLE FOR SELECTED TRA..." and the track grid is empty. | missing | content |
-| Pads in STEP SEQ | PAD 0 | `StepSeq::handleCommand` | Toggles the step. | Packet logged. Screen: "Create any Track Before using StepSequencer". | missing | content |
-| Pads in SAMPLER | PAD 0 | `Sampler::handleCommand` | Starts recording or marks a slice. | Packet logged. No visible change. Input is silent unless `KICK_SIM_AUDIO_INPUT` is set (phase 4). | missing | content / engine |
-| Pads in PROG EDIT, MIDI CTRL | PAD 0 | `ProgramEdit::handleCommand`, `MidiControl` | Selects the pad or plays it; MIDI-learns the control. | Packet logged; "No Programs Available"; no change. | missing | content |
-| SHIFT + pad on MAIN | PAD 0 with SHIFT on | Main | Modifier behaviour per screen. | Same as a plain pad. | missing | content |
+| Pads in TRACK MUTE / PAD MUTE | PAD 0 | `KickPadButtonGroupComponent` (`kick_padButtonGroup.cpp`) → `triggerClick` | Toggles mute (or solo with SHIFT) of the track or pad. | Phase 5 (`sim_modes.sh`): TRACK MUTE pads mute tracks while playing (all three muted: -120 dBFS); PAD MUTE Pad 1 mutes the kick (-120 dBFS, unmuted -13.3 dBFS). SHIFT + pad (solo) not checked. | works | none |
+| Pads in STEP SEQ | PAD 0 | `StepSeq::handleCommand` | Toggles the step. | 2026-10-28 (Starter Kit, Drums, pad A01): Pad 2 sets step 2: `PAD cmd=10 ... 120,127,0,...` (steps 1, 2 and 9 now set) and the screen shows the new bar. | works | none |
+| Pads in SAMPLER | PAD 0 | `Sampler::handleCommand` | Starts recording or marks a slice. | Phase 4 records from the screen's record button with `KICK_SIM_AUDIO_INPUT` (DEVELOPMENT.md 4.6); starting a take from a pad was not checked. | partial (not re-checked) | none known |
+| Pads in PROG EDIT, MIDI CTRL | PAD 0 | `ProgramEdit::handleCommand`, `MidiControl` | Selects the pad or plays it; MIDI-learns the control. | 2026-10-28, PROG EDIT on Starter Drums: Pad 2 plays (probe -12.9 dBFS) and selects the pad. MIDI CTRL learning not checked. | works (PROG EDIT) | none |
+| SHIFT + pad on MAIN | PAD 0 with SHIFT on | Main | Modifier behaviour per screen. | 2026-10-28: SHIFT, Pad 1, SHIFT on MAIN plays the kick like a plain hit (-13.3 dBFS); no other effect was found in the handlers. | works | none |
 
 ## Loaded state: banks
 
@@ -149,8 +169,8 @@ turned on.
 |---|---|---|---|---|---|---|
 | MAIN | `EN_MAINMODE` (8) | Global → `HomeListView` | Main screen (Sequence / Track / Program tabs). | Phase 5 (`sim_modes.sh`, Starter Kit): Main screen with the kit's tracks / programs; `LED 8,1,0`, previous mode LED off. | works | none |
 | BROWSE | `EN_BROWSE` (10) | Global → `MenuFileBrowser` | File browser: Internal, Factory Sample Library, Demos, SD / USB. | Phase 5 (`sim_modes.sh`, Starter Kit): File Browser; `LED 10,1,0`. SD / USB rows are hardware (see 4.5). | works | hardware (SD/USB) |
-| TRACK MIX | `EN_TRACK_MIX` (12) | Global → `MenuChannelMixer` | Track mixer strips; Q-Links edit the strip. | Phase 5 (`sim_modes.sh`, Starter Kit): Track Mixer with the three program strips; `LED 12,1,0`. P1 = row 1 OUT, P2 = LEVEL (100 → 50), P3 = PAN; no crash, also with an empty project (fixed). The program LEVEL is not heard: nothing in the engine reads a program's level. | partial | engine (program level unused) |
-| TRACK MUTE | `EN_TRACK_MUTE` (14) | Global → `MenuTrackMute` | Track mute grid on the pads. | Phase 5 (`sim_modes.sh`, Starter Kit): T01 Drums, T02 Keys, T03 Loops; `LED 14,1,0`. Pads mute tracks while playing: drums alone peak -3 dBFS, all three muted -120 dBFS, unmuted +2 dBFS (probe). | works | none |
+| TRACK MIX | `EN_TRACK_MIX` (12) | Global → `MenuChannelMixer` | Track mixer strips; Q-Links edit the strip. | Phase 5 (`sim_modes.sh`, Starter Kit): Track Mixer with the three program strips; `LED 12,1,0`. P1 = row 1 OUT, P2 = LEVEL (100 → 50), P3 = PAN; no crash, also with an empty project (fixed). Since phase 3 the level is heard: 100 → 50 takes Pad 1 from -13.3 to -19.3 dBFS. | works | none |
+| TRACK MUTE | `EN_TRACK_MUTE` (14) | Global → `MenuTrackMute` | Track mute grid on the pads. | Phase 5 (`sim_modes.sh`, Starter Kit): T01 Drums, T02 Keys, T03 Loops; `LED 14,1,0`. Pads mute tracks while playing: drums alone peak -7.2 dBFS, all three muted -120 dBFS, unmuted -3.2 dBFS (probe, 2026-10-28; before phase 3's gain fix the unmuted mix clipped at +2 dBFS). | works | none |
 | NEXT SEQ | `EN_NEXT_SEQ` (16) | Global → `MenuNextSequence` | Sequence grid; pads queue sequences. | Phase 5 (`sim_modes.sh`, Starter Kit): S01 / S02 (starter Sequence 02 added); `LED 16,1,0`. While playing, Pad 2 queues Sequence 02, which takes over at the end of Sequence 01 (status bar Sequence 02 / Drums Live). P1 = BPM (120 → 122, list now refreshes), P2 length, P3 / P4 loop points; no crash with an empty project (fixed). | works | none |
 | STEP SEQ | `EN_STEP_SEQ` (32) | Global → `HomeSequencerView` | Step sequencer on the pads. | Phase 5 (`sim_modes.sh`, Starter Kit): Step Sequencer on Drums, pad A01 steps 1 and 9 set, TIME DIV 16; `LED 32,1,0`. | works | none |
 | TC | `EN_TC` (34) | Global → `TimingCorrect::showWindow` (new) | Timing Correct window (quantise). | Phase 5 (`sim_modes.sh`, Starter Kit): TIMING CORRECT window: on/off, NOTE VALUE (the sequence's quantization, shared with Step Seq / Grid), STRENGTH. Apply with TC on moved 23 of 23 off-grid notes of Sequence 02 "Drums Live" onto the 1/16 grid (checked in the saved project). No LED of its own; the TC LED shows ON/OFF. | works | none (new code) |
@@ -164,8 +184,8 @@ turned on.
 |---|---|---|---|---|---|---|
 | GRID (SHIFT+MAIN) | `EN_GRID` (9) | Global (second switch) → `HomeGridView` | Piano-roll grid of the track. | Phase 5 (`sim_modes.sh`, Starter Kit): Grid View of Drums with its notes; `LED 9,1,0`. | works | none |
 | SAVE (SHIFT+BROWSE) | `EN_SAVE` (11) | Global → `ae.saveProject()` → `KickXML::save` | Saves the project; writes only if the XML changed. | Phase 5 (`sim_modes.sh`, Starter Kit): `Starter Kit.kickPrj` rewritten (mtime), and after TC the saved file holds the moved notes. No LED (none defined). | works | none |
-| PAD MIX (SHIFT+TRACK MIX) | `EN_PAD_MIX` (13) | Global → `MenuPadMixer` | Per-pad mixer. | Phase 5 (`sim_modes.sh`, Starter Kit): Pad Mixer of Starter Drums (01 Kick ...); `LED 13,1,0`. P1 = pad A01 LEVEL (1.00 → 0.00; was off by one row and addressed nothing, fixed), P2 PAN, P3 mute / solo; no crash with an empty project (fixed). The pad gain is not heard: the drum voice ignores a pad's gain. | partial | engine (pad gain unused) |
-| PAD MUTE (SHIFT+TRACK MUTE) | `EN_PAD_MUTE` (15) | Global → `MenuPadMute` | Pad mute grid. | Phase 5 (`sim_modes.sh`, Starter Kit): Pads A01-A16 named after the kit; `LED 15,1,0`. Pad 1 mutes the kick: Pad 1 on MAIN peaks -120 dBFS muted, -9.2 dBFS unmuted (probe). | works | none |
+| PAD MIX (SHIFT+TRACK MIX) | `EN_PAD_MIX` (13) | Global → `MenuPadMixer` | Per-pad mixer. | Phase 5 (`sim_modes.sh`, Starter Kit): Pad Mixer of Starter Drums (01 Kick ...); `LED 13,1,0`. P1 = pad A01 LEVEL (was off by one row and addressed nothing, fixed), P2 PAN, P3 mute / solo; no crash with an empty project (fixed). Heard since phase 3: P1 -50 takes Pad 1 to -120 dBFS, P1 +50 restores -13.3 dBFS (after the 2026-10-28 knob-routing fix, see Open gaps). | works | none |
+| PAD MUTE (SHIFT+TRACK MUTE) | `EN_PAD_MUTE` (15) | Global → `MenuPadMute` | Pad mute grid. | Phase 5 (`sim_modes.sh`, Starter Kit): Pads A01-A16 named after the kit; `LED 15,1,0`. Pad 1 mutes the kick: Pad 1 on MAIN peaks -120 dBFS muted, -13.3 dBFS unmuted (probe; -9.2 before phase 3's gain fix). | works | none |
 | FX (SHIFT+NEXT SEQ) | `EN_FX` (17) | Global → `HomeXYView` | XY effects; Q-Links: preset, attack, release, wet/dry. | Phase 5 (`sim_modes.sh`, Starter Kit): XY Effects; `LED 17,1,0`; P1-P4 edit the Setup panel's preset / attack / release / wet-dry. No sound change: `XyFxView` only updates its labels, nothing connects it to the engine in this release (no XY effect code). | partial | code (XY FX not connected to audio) |
 | MASTER (SHIFT+TAP TEMPO) | `EN_MASTER` (19) | Global → `KickHome::toggleMasterTempo` (new) | Switches the selected sequence between its own tempo and the master tempo. | Phase 5 (`sim_modes.sh`, Starter Kit): Sequence 02 (own tempo 100 BPM): `Tempo source: Sequence 02 Master Tempo: 120 BPM`, again: `Sequence Tempo: 100 BPM`; the Main screen's Global toggle follows; notification bubble; `LED 19,1` / `19,0` (the panel has no LED under the caption). | works | none (new code) |
 | LATCH (SHIFT+NOTE REPEAT) | `EN_LATCH` (25) | `PadModifiers` (`kick_ui/dialogs/kick_PadModifiers.cpp`, new) | Latches note repeat on, so held pads repeat without holding NOTE REPEAT; again (or NOTE REPEAT) unlatches. | Phase 5: `LED 24,1` + `LED 25,1` (the panel lights NOTE REPEAT for both); a 1 s held clave retriggers 8-9 times, median 125-130 ms (1/16 at 120 BPM); unlatched, the same hold gives 1 onset. | works | none |
@@ -217,83 +237,72 @@ Driven with `sim_ctl.sh turn` / `sim_turn.sh` (one KNOBS packet per detent) and
 | P1-P4 on MAIN | KNOBS knob 1-4, cmd 1 | Main tab `knobCommand` → `linkRotated` | Track tab: the first row's I/P MIDI CH, LENGTH, LEVEL, TRANSPOSE (P5-P16 the next rows, via the Q-Link pages). | Phase 5: P3 +5 LEVEL 42 → 47, P4 +2 TRANSPOSE 0 → 2 (screenshots). TRACK MIX: P2 -10 level 100 → 90, P3 -3 pan 0 → -1.00. STEP SEQ: P1-P4 = the level of steps 1-4 of the page (P2 -4 sets step 2, `PAD cmd=10`). | works | none |
 | P1 in NEXT SEQ | KNOBS knob 1 | `KickNextSequenceMode::knobCommand` | Sequence BPM. | Fixed (phase 5): null sequence guarded, no crash with an empty project. Starter Kit: BPM 120 → 122, the list now refreshes. | works | none |
 | P1 in TRACK MIX | KNOBS knob 1 | `ChannelMixer::knobCommand` | Row 1 OUT; P2 level, P3 pan. | Fixed (phase 5): empty table and the Output / Midi tab casts guarded; the row maths now measures from the Kick screen in the simulator. Starter Kit: P2 level 100 → 50. | works | none |
-| P1 in PAD MIX | KNOBS knob 1 | `PadMixer::handleCommand` → `PadMixerContent::knobCommand` | Pad A01 level. | Fixed (phase 5): empty table guarded, row off-by-one fixed. Starter Kit: A01 level 1.00 → 0.00. | works | none |
+| P1 in PAD MIX | KNOBS knob 1 | `PadMixer::handleCommand` → `PadMixerContent::knobCommand` | Pad A01 level. | Fixed (phase 5): empty table guarded, row off-by-one fixed. Starter Kit: A01 level 1.00 → 0.00 → 1.00, heard (-120 / -13.3 dBFS). | works | none |
 | P1 in SAMPLER | KNOBS knob 1 | Sampler `knobCommand` | Max record length. | Max Length 00:20 → 00:21; slider LED `SLIDER cmd=1 data=35`. | works | none |
 | P1-P4 in NOTES, FX, GRID, LOOPER, PREFS, LINK EDIT, MIDI CTRL, PROG EDIT, SAMPLE EDIT | KNOBS | Screen `knobCommand` | Screen-specific parameters. | PROG EDIT (drum, keygroup, clip) assigns nothing to the Q-Links (only the audio program grid reads them). It used to treat each Q-Link packet as a pad hit: P1 played note 1 at velocity 1 and relabelled the pad "A02"; fixed in phase 5 (`kick_ProgramEdit.cpp`). Others not re-checked in phase 5 (pads and encoders). | partial | code (no assignment) |
 | Slider | SLIDER 0-100 | Focused control `sliderMoved` (`kick_ControlBase.h`) | The touch strip sets the touched (focused) control, as the jog and + / - do; the app shows that control's value, or on MAIN's Track tab the track meter, on the strip's LEDs. | Phase 5: touch LEVEL of track 1, slider 30 → LEVEL 100 → 38 (30 % of 0-127). Before, the simulator could not give a control focus (below). The panel's LED ladder now shows the app's `SLIDER cmd=1/2` values. | works | none |
 | MASTER, REC pots | none | none | Analogue pots on the unit. | Turn in the UI; no packet (by design). | works | none |
 
-## Gaps by class
+## Open gaps (2026-10-28)
 
-### content (phase 2, starter project)
+The Phase 1 audit's "gaps by class" (content, engine, hardware, sim, code) are closed except as
+listed here. The original list is in commit `ed11a60a`.
 
-- Pads make no sound in any mode; the audio probe was silent for the whole audit.
-- PLAY / PLAY START do not start the counter or light PLAY.
-- Pad colours never show a program.
-- Every mode screen is empty: Track Mix, Pad Mix, Pad / Track Mute, Next Seq, Step Seq,
-  Prog Edit, Sample Edit, Grid.
-- ERASE, COPY and the jog / Q-Links have nothing to act on.
+**Content.** Nothing proprietary can come back, so:
 
-A starter project with a selected track and program on bank A unblocks most rows.
+- Banks E-H have no sounds: the Starter Kit's programs stop at note 63.
+- The factory projects (Demo 01-05, Template 01-05) are still empty `<ROOT>` documents.
+- Keygroup programs are silent, because `KeygroupProgram::noteOn` is a stub in this release.
+  Starter Keys is a chromatic drum program instead.
 
-**Three crashes** happen with an empty project: P1 in NEXT SEQ, P1 in TRACK MIX, and P1 in
-PAD MIX. All are null dereferences when there is no sequence, strip or program. Starter content
-hides them. Phase 5 should still guard `KickNextSequenceMode::knobCommand`,
-`ChannelMixer::knobCommand` and `PadMixer::handleCommand`, because a user project can be empty
-too.
+**Missing from the release's code.** These are absent on the device too:
 
-### engine (phases 3 and 4)
+- AUTO: there is no automation engine. The simulator says so; the device build does nothing.
+- FX: the XY view is not connected to any audio processing.
+- PROG EDIT assigns nothing to P1-P4.
+- LINK (Q-Link page select) shows no visible change on MAIN.
+- COPY only has a job in GRID. The `KickCopy` / `KickErase` dialogs are never opened.
+- Transport: no count-in, the TAP TEMPO LED does not flash, and RECORD captures notes only (no
+  audio-track recording).
 
-Not reachable yet. Nothing plays, so the reconstructed `mt::ADSR`, `Filter`, `Looper` and
-`Recorder` were not exercised:
+**Engine.**
 
-- Looper RECORD / PLAY changed the screen, but the input was silent.
-- Sampler RECORD showed no change.
+- After a SAMPLE EDIT trim, a pad that already holds the file plays the old audio until the
+  project is reloaded.
+- The looper takes its tempo from the selected sequence. With no sequence the loop is 1 s long.
+- A looper take starts at the key press, because the input threshold defaults to -100 dB.
 
-Phase 4 needs `KICK_SIM_AUDIO_INPUT` plus content. Phase 3 should re-test transport once a
-sequence exists.
+**Inferred device behaviour.** These were built from the code, captions and screens, not
+checked on a unit:
 
-### hardware (phase 6)
+- ERASE + pad erases all of that pad's notes.
+- LATCH latches the note repeat, not the pads.
+- FULL / HALF LEVEL are off at project load.
+- Only ERASE and NOTE REPEAT report key releases.
+- PAD MIX P1-P4 address the row they sit on (the off-by-one fix).
 
-- BROWSE lists SD / USB locations, which read `/dev/mmcblk1`, `/dev/sda` and `/mnt/...`.
-- PREFS has Ethernet, WiFi, CV and Firmware Update.
+**Fixed on 2026-10-28.** The P1-P16 knobs went to whichever control had keyboard focus, and those
+controls ignore them. In PAD MIX a pad hit focuses its on-screen button, so P1 stopped changing
+the level after any pad press. `KickHome::handleCommand` now sends link knobs to the screen
+unless a modal popup is open. This is shared code, so it changes the device too.
 
-With Phase 6 merged, the WiFi, Ethernet and CV tabs show "Not available in the simulator"
-(verified above), and nothing hung. The SD / USB area of BROWSE and Firmware Update were not
-re-checked in this audit.
+**Hardware.** Wi-Fi, Ethernet, CV / Gate, System Resources, Firmware Update, and the SD / USB
+locations in BROWSE show "Not available in the simulator" (DEVELOPMENT.md 4.5). The camera has no
+software. Not reached: the firmware progress screen (needs a valid image) and the CV program
+editor (needs a CV program).
 
-### sim (fixed in this phase)
+**Simulator limits.**
 
-- **Bank LEDs piled up.** The app sends only "bank N on", so the panel lit every bank ever
-  selected. Now one bank is lit at a time, and E-H light the A-D key they are printed under.
-  This is in `Simulator::handleLedMessage`.
-- **Encoders and the slider could not be scripted** (no accessibility names, not buttons).
-  Fix: `sim_ctl.sh turn P1..P4|JOG STEPS` and `sim_ctl.sh slider V`, with `sim_turn.sh` as
-  shorthand. The knobs are named `P1`-`P4` / `JOG` and the slider `SLIDER` so
-  `kick_SimControl.cpp` can find them.
+- The app's full-screen popups open as separate desktop windows at native size, not inside the
+  scaled bezel (DEVELOPMENT.md 4.1).
+- The MASTER and REC pots are analogue on the unit and do nothing here.
+- Only one `KT_KickEM` runs per machine.
 
-Still open:
+**Not re-checked since the empty-project audit:**
 
-- HALF LEVEL's LED (id 49) has no key on the panel.
-- `sim_launch.sh` can lose its lock. Between `mkdir` of the lock and writing the app pid,
-  another waiting launcher may treat the empty lock as stale and remove it. Seen once:
-  `sim_launch.sh: line 60: /tmp/kt_kickem.lock/pid: No such file or directory` while the app
-  was already running.
-
-### code (phase 5, new UI code)
-
-No handler exists for:
-
-- TAP TEMPO, NOTE REPEAT, LATCH, 16 LEVELS, TC, ON/OFF, AUTO, MASTER and BACK;
-- RECORD and OVERDUB outside the Looper.
-
-Other code gaps:
-
-- The slider only reaches a focused control.
-- The LOOPER LED is never switched off.
-- FULL LEVEL and HALF LEVEL never switch each other's LED off.
-
-These need new handlers, not content.
+- Pads in BROWSE (audition), in SAMPLER and in MIDI CTRL.
+- P1-P4 in NOTES, GRID, LOOPER, PREFS, LINK EDIT, MIDI CTRL and SAMPLE EDIT (SAMPLE EDIT's P4
+  trim is exercised by `sim_sampler_looper.sh`).
 
 ## Phase 5 (mode keys)
 
@@ -315,9 +324,9 @@ screenshots and the result table are in `docs/sim_audit/phase5_modes/`.
   (`SIM_BUILD` only). PAD MIX also addressed one row too high (fixed in shared code).
 - **Content**: the Starter Kit has a second sequence (Sequence 02, 100 BPM, an off-grid "Drums
   Live" track and the loops) for NEXT SEQ, MASTER and TC.
-- **Still different from the device**: program LEVEL (TRACK MIX) and pad LEVEL (PAD MIX) change on
-  screen but not in the sound (engine, see 4.8); FX (XY) is not connected to audio in this
-  release; there is no automation (AUTO).
+- **Still different from the device**: FX (XY) is not connected to audio in this release; there
+  is no automation (AUTO). (Program LEVEL and pad LEVEL were not heard at the time; phase 3 fixed
+  that.)
 
 
 ## Phase 5 (pads and encoders)
@@ -363,8 +372,8 @@ on the Starter Kit and measures them on the audio probe: last run all 21 checks 
   sequence changes now run on the tick thread and the tracks lock (DEVELOPMENT.md 5.1).
 - **Input**: loading a project does not monitor the input (measured); `sim_launch.sh` uses a
   silent test input unless `KICK_SIM_AUDIO_INPUT` is set (`device` for the real one).
-- **Known issue**: PAD MIX P1 changes the engine's pad gain once, but the turn that restores it
-  (P1 +50 after -50) shows 1.00 on screen without reaching the engine, so pad A01 stays silent;
-  `sim_modes.sh` then fails "PAD MUTE pad 1" (4 of 4 runs on this branch; DEVELOPMENT.md 5.1).
+- **Known issue, fixed 2026-10-28**: PAD MIX P1 changed the pad gain once, but the turn that
+  restores it (P1 +50 after -50) never reached the engine, so `sim_modes.sh` failed "PAD MUTE pad
+  1". The cause was knob routing, not the engine: see "Open gaps", fixed on 2026-10-28.
 - **Still different**: no count-in; no TAP TEMPO LED flashing; RECORD records only notes that
   reach the selected track through the pads / MIDI (no audio-track recording).
