@@ -16,6 +16,7 @@
 #   Kick/tools/sim_ctl.sh slider VALUE      # the slider, 0..100
 #   Kick/tools/sim_ctl.sh shot OUT.png      # render the panel (and popups as OUT-<n>.png)
 #   Kick/tools/sim_ctl.sh list [FILTER]     # titled components, printed from the app log
+#   Kick/tools/sim_ctl.sh windows           # desktop windows, popups over the screen, the screen
 #   Kick/tools/sim_ctl.sh repeat MS N NAME  # press a panel control N times, MS ms apart (timed in the app)
 #   Kick/tools/sim_ctl.sh status            # transport state, BAR:BEAT:TICK, tempo, record mode
 #   Kick/tools/sim_ctl.sh echo TEXT         # write a marker line into the app log
@@ -92,7 +93,8 @@ case "$CMD" in
         TIMEOUT=$(( TIMEOUT + MS * N / 1000 + 1 ))
         send "repeat $MS $N $(q "$(key_name "$*")")"
         printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: repeat //p' ;;
+    windows) send "windows"; printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: window //p' ;;
     status) send "status"; printf '%s\n' "$OUTPUT" | sed -n 's/^SimControl: status //p' ;;
     echo) send "echo $*" ;;
-    *) sed -n '2,27p' "$0" >&2; exit 2 ;;
+    *) sed -n '2,28p' "$0" >&2; exit 2 ;;
 esac

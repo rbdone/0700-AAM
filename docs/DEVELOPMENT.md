@@ -123,9 +123,13 @@ LEDs sent by the app are shown.
   behave as on the device (section 7 says how far it got). `/goal-serial` and `/goal-vm` are the
   follow-ons: the device's real serial path against the simulated panel, then the Linux build in
   an ARM virtual machine.
-- Known limitation: the app's full-screen popups (`kick_utils_popup.cpp`) are separate desktop
-  windows sized to the primary display, so they open at native size over the whole screen rather
-  than inside the scaled bezel. They work, they just do not scale.
+- Popups follow the screen. On the unit the Kick screen is the whole display, so the app puts
+  its full-screen popups (dialogs, the loading spinner: `kick_utils_popup.cpp`) and notification
+  bubbles (`kick_utils_bubble.cpp`) on the desktop at display coordinates. Under `SIM_BUILD` they
+  are added to the screen's root component instead (`ui::simScreen()`, `kick_ControlBase.h`, set
+  by `kick_Simulator.cpp`), so they appear inside the bezel, scaled with it, whichever app is in
+  front. While such a dialog is modal, the panel's keys, pads and encoders still reach the app,
+  as the hardware keys do. `Kick/tools/sim_overlays.sh` checks this (14 checks, about 25 s).
 
 What was verified on macOS: the simulator starts, the app opens the default audio device at
 48 kHz with a 480-sample block, the control-surface handshake completes, pressing the jog wheel
@@ -150,11 +154,12 @@ Everything a check needs is in `Kick/tools/` and works from any directory:
 | `sim_shot.sh [--all] OUT.png` | Captures the panel window by window id (`screencapture -l`), so it works while other windows cover it. `--all` also captures the app's popup windows as `OUT-<n>.png`. |
 | `sim_quit.sh` | Stops the simulator and releases the lock. |
 | `sim_click.sh NAME...`, `--at X Y`, `--list [FILTER]` | Touches the **screen** rather than the panel: clicks an on-screen component by its accessibility title (Preferences tabs `Info`, `Hardware`, `CV`, `Ethernet`, `WiFi`; buttons such as `Firmware Update`, `Resources`), or pixel (X,Y) of the 1024x600 Kick screen wherever the window has scaled it; `--list` prints every accessible element with its frame. A real mouse click (CGEvent) through a small Swift helper (`sim_ax.swift`, compiled on first use into `Kick/build/sim_ax`). Needs Accessibility permission and an unlocked, visible window. |
-| `sim_ctl.sh press\|click\|tap\|shot\|list\|echo ...` | The same jobs **from inside the app**, with no accessibility and no window server, so it keeps working while the Mac is locked or asleep or the window is covered. `press NAME` = panel control by printed name (as `sim_press.sh`), `click NAME` = on-screen component by title (as `sim_click.sh`), `tap X Y` = Kick-screen pixel, `shot OUT.png` = renders the panel to `OUT.png`, the Kick screen at its native 1024x600 to `OUT-screen.png` and each popup window to `OUT-<n>.png`, `list [FILTER]` = titled components, `echo TEXT` = marker in the log. Each command waits for the app's acknowledgement (`SimControl: ok <n>`), so a blocked message thread shows up as a timeout and exit status 1. `turn KNOB STEPS` turns encoder `P1`-`P4` or `JOG` by signed detents and `slider VALUE` sets the slider (0-100); see the next row. |
+| `sim_ctl.sh press\|click\|tap\|shot\|list\|echo ...` | The same jobs **from inside the app**, with no accessibility and no window server, so it keeps working while the Mac is locked or asleep or the window is covered. `press NAME` = panel control by printed name (as `sim_press.sh`), `click NAME` = on-screen component by title (as `sim_click.sh`), `tap X Y` = Kick-screen pixel, `shot OUT.png` = renders the panel to `OUT.png`, the Kick screen at its native 1024x600 to `OUT-screen.png` and each popup window to `OUT-<n>.png`, `list [FILTER]` = titled components, `windows` = the desktop windows, the popups and bubbles over the screen and the screen, each with its bounds on the Mac's display, `echo TEXT` = marker in the log. Each command waits for the app's acknowledgement (`SimControl: ok <n>`), so a blocked message thread shows up as a timeout and exit status 1. `turn KNOB STEPS` turns encoder `P1`-`P4` or `JOG` by signed detents and `slider VALUE` sets the slider (0-100); see the next row. |
 | `sim_turn.sh P1..P4\|JOG STEPS`, `sim_turn.sh SLIDER V` | Shorthand for `sim_ctl.sh turn` / `slider`: the encoders and the slider are not buttons, so `sim_press.sh` cannot reach them. Each detent is one `EN_PKT_TYPE_KNOBS` packet of magnitude 1 (cmd `EN_KNOB_QLINK` for P1-P4, `EN_KNOB_ROTARY` for the jog wheel), sent through the knob's own `onStep`, the same path as a mouse drag; positive is clockwise. The slider sends one `EN_PKT_TYPE_SLIDER` / `EN_SLIDER_TOUCH_INPUT` packet with the absolute value. (Arrow up/down in 4.3 also turn the jog wheel, but only while the window has keyboard focus.) |
 | `sim_ctl.sh down NAME [VEL]`, `up NAME`, `hold NAME SECS [VEL]` | Hold a pad or key (section 4.9): `down` presses it and leaves it pressed, `up` releases it, `hold` does both with SECS in between and answers after the release. Pads take a velocity (1-127; the default is the pad's last one, 100 at start), e.g. `hold "Pad 1" 0.1 30` is one soft hit; `down ERASE`, `press "Pad 3"`, `up ERASE` is ERASE + pad. Packets are sent directly (no mouse state), so it works with the screen locked. |
 | `sim_ctl.sh repeat MS N NAME`, `clickat NAME FX FY`, `status` | `repeat` presses a panel control N times MS ms apart on an absolute schedule timed inside the app (TAP TEMPO at a known tempo); `clickat` touches a titled component at a fraction of its size (the On half of the METRONOME dialog's ENABLE: `clickat ENABLE 0.75 0.6`); `status` prints the engine's transport state, BAR:BEAT:TICK (1-based, as on screen), master BPM, the MIDI clock's tempo, the record mode and the metronome switch, e.g. `playing bbt=1:03:068 bpm=120 clock=120.0 rec=off metronome=off` (section 4.7). |
 | `sim_smoke.sh [--no-build] [OUTDIR]` | The smoke test (section 4.10): build, boot, load the Starter Kit with PUSH, play four bars, stop; fails if the engine stays silent, clips, or the LED feedback does not arrive. |
+| `sim_overlays.sh [OUTDIR]` | Popups and bubbles appear inside the simulated screen, never as separate windows: the loading spinner, a dialog, nested dialogs, a notification bubble, and a panel key clicked while a dialog is modal (section 4.1). |
 | `sim_pads.sh [OUTDIR]` | The phase 5 check for pads, modifiers, encoders and the slider (section 4.9). |
 | `sim_transport.sh [OUTDIR]` | The phase 3 check (section 4.7): transport keys, BAR:BEAT:TICK, gain staging, RECORD / OVERDUB, TAP TEMPO and the metronome, measured on the audio probe. |
 | `sim_sampler_looper.sh [OUTDIR]` | The phase 4 check (section 4.6): sampler record / preview / save to a pad / trim, and looper record / loop / overdub, measured on the audio probe. |
@@ -667,12 +672,12 @@ on any failure. A run takes about 25 s after the build. Last result (2026-10-28)
 
 Screenshots from that run: `docs/sim_audit/phase7_smoke/loaded.png` and `playing.png`.
 
-The deeper checks are `sim_transport.sh` (4.7), `sim_modes.sh` (4.8), `sim_pads.sh` (4.9) and
-`sim_sampler_looper.sh` (4.6). Each takes a few minutes and waits for the simulator lock, so run
+The deeper checks are `sim_transport.sh` (4.7), `sim_modes.sh` (4.8), `sim_pads.sh` (4.9),
+`sim_sampler_looper.sh` (4.6) and `sim_overlays.sh` (4.1). Each takes a few minutes and waits for the simulator lock, so run
 them one after another:
 
 ```sh
-for t in smoke transport modes pads sampler_looper; do Kick/tools/sim_$t.sh || echo "FAILED: $t"; done
+for t in smoke transport modes pads sampler_looper overlays; do Kick/tools/sim_$t.sh || echo "FAILED: $t"; done
 ```
 
 ## 5. What had to change to make the public release build
@@ -979,8 +984,7 @@ Started from `Kick/build` with no hardware, on a fresh checkout:
     CRC and `juce_serialport` (a stub) are not exercised; `/goal-serial` covers them.
   - **Linux paths:** the device's Linux code paths (`/app`, systemd, Weston, overlay mounts) are
     not compiled on macOS; `/goal-vm` covers them.
-- **Simulator limits.** Popups open as separate windows at native size, not inside the scaled
-  bezel. Only one simulator runs per machine.
+- **Simulator limits.** Only one simulator runs per machine.
 
 ### Shared code that changed device behaviour
 

@@ -293,8 +293,6 @@ editor (needs a CV program).
 
 **Simulator limits.**
 
-- The app's full-screen popups open as separate desktop windows at native size, not inside the
-  scaled bezel (DEVELOPMENT.md 4.1).
 - The MASTER and REC pots are analogue on the unit and do nothing here.
 - Only one `KT_KickEM` runs per machine.
 

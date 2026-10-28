@@ -505,6 +505,8 @@ namespace sim
 
         // The real device screen, scaled into the bezel cut-out (see resized()).
         addAndMakeVisible( kick_ui::KickHome::Instance() );
+        // Full-screen popups, dialogs and notifications go over it, not on the desktop.
+        ui::simScreen() = &kick_ui::KickHome::Instance();
 
         // Pads...
         for( int i = 0; i < 16; ++i )
@@ -629,6 +631,7 @@ namespace sim
     {
         stopTimer();
         auto& home = kick_ui::KickHome::Instance();
+        ui::simScreen() = nullptr;
         home.setTransform( {} );
         removeChildComponent( &home );
         for( auto* s : { &master, &rec } )

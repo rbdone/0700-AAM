@@ -38,6 +38,17 @@ namespace ui
         static juce::Component::SafePointer<juce::Component> target;
         return target;
     }
+
+    /// Simulator only. On the unit the Kick screen is the whole display, so full-screen popups,
+    /// dialogs and notifications are placed in display coordinates on the desktop (or over the
+    /// one full-screen window). The simulator draws that screen scaled and offset inside its
+    /// front panel, so it registers the screen's root component here (kick_Simulator.cpp) and
+    /// those overlays are added to it instead (kick_utils_popup.cpp, kick_utils_bubble.cpp).
+    inline juce::Component*& simScreen()
+    {
+        static juce::Component* screen = nullptr;
+        return screen;
+    }
 #endif
 
     struct KickControlsProcessor

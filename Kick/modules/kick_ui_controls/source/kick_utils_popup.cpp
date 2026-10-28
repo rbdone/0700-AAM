@@ -31,10 +31,15 @@ namespace mt
         {
             setOpaque( true );
 
+#ifdef SIM_BUILD
+            // Covers the simulated screen; getFullScreenModalPopUP() adds it to ui::simScreen().
+            setBounds( ui::layout::screen );
+#else
             auto display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
             auto b       = display->totalArea;
             setBounds( b ); // Overall component Area.
             addToDesktop( compPeer::windowIsTemporary | compPeer::windowHasDropShadow );
+#endif
         }
 
         virtual ~fsPopup() = default;
@@ -60,6 +65,16 @@ namespace mt
         {
             image.clear( ui::layout::screen );
 
+#ifdef SIM_BUILD
+            // The blurred backdrop is the simulated screen, not the panel window's top-left corner.
+            if( auto s = ui::simScreen() )
+            {
+                setVisible( false );
+                image = s->createComponentSnapshot( ui::layout::screen, false );
+                stack_blur<10>( image );
+            }
+            else
+#endif
             if( auto w = juce::TopLevelWindow::getActiveTopLevelWindow() )
             {
                 image = w->createComponentSnapshot( ui::layout::screen, false );
@@ -84,6 +99,17 @@ namespace mt
                     exitModalState( exitCode );
             } );
         }
+
+#ifdef SIM_BUILD
+        // The panel's keys, pads and encoders are hardware on the unit and reach a modal dialog
+        // through the control-surface link (handleCommand). In the simulator they are components
+        // beside the screen, which JUCE would block while the dialog is modal.
+        bool canModalEventBeSentToComponent( const juce::Component* C ) override
+        {
+            auto s = ui::simScreen();
+            return s != nullptr && C != nullptr && C != s && !s->isParentOf( C ) && !C->isParentOf( s );
+        }
+#endif
 
     protected:
         virtual void reset()
@@ -326,6 +352,15 @@ namespace mt
 
         _popups.emplace_back( new Type() );
         auto& p = _popups.back();
+#ifdef SIM_BUILD
+        // The panel window is not necessarily the active window (another app in front, screen
+        // locked), and its top-left corner is not the screen: always use the simulated screen.
+        if( auto s = ui::simScreen() )
+        {
+            s->addAndMakeVisible( p.get() );
+            return p.get();
+        }
+#endif
         auto  c = juce::TopLevelWindow::getActiveTopLevelWindow();
         c->addAndMakeVisible( p.get() );
         return p.get();

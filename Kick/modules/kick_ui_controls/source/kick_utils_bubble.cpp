@@ -27,6 +27,15 @@ namespace mt
         bubbleNotification()
             : juce::BubbleMessageComponent()
         {
+#ifdef SIM_BUILD
+            // Positions are on the 1024x600 screen: show over the simulated screen (ui::simScreen()).
+            if( auto s = ui::simScreen() )
+            {
+                setAlwaysOnTop( true );
+                s->addChildComponent( this );
+            }
+            else
+#endif
             addToDesktop( 0 );
             setAllowedPlacement( BubbleMessageComponent::above );
         }
@@ -45,7 +54,12 @@ namespace mt
 
         void show( const juce::AttributedString& Str, juce::Rectangle<int> Bounds = ui::layout::statusBar, int TimeInMS = 1500 )
         {
+#ifdef SIM_BUILD
+            // A child of the screen, so delete it once it has faded rather than leave it there.
+            showAt( Bounds, Str, TimeInMS, true, getParentComponent() != nullptr );
+#else
             showAt( Bounds, Str, TimeInMS );
+#endif
             setPosition( Bounds.getCentre(), -1 );
         }
 

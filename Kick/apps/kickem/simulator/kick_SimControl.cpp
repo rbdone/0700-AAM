@@ -216,6 +216,20 @@ namespace sim
             return r.isEmpty() ? ok() : fail( r );
         }
 
+        if( cmd == "windows" )
+        {
+            // Every showing desktop window, and every showing child laid over the screen (the
+            // app's popups, dialogs and notifications), with its bounds on the Mac's display.
+            auto wins = windows( panel );
+            for( int i = 0; i < wins.size(); ++i )
+                log( "window " + juce::String( i == 0 ? "main" : "desktop" ) + "\t" + typeid( *wins[i] ).name() + "\t" + wins[i]->getScreenBounds().toString() );
+            for( auto* c : screen.getChildren() )
+                if( c->isVisible() && ( c->isCurrentlyModal( false ) || dynamic_cast<juce::BubbleComponent*>( c ) != nullptr ) )
+                    log( "window overlay\t" + juce::String( typeid( *c ).name() ) + "\t" + c->getScreenBounds().toString() );
+            log( "window screen\t" + juce::String( typeid( screen ).name() ) + "\t" + screen.getScreenBounds().toString() );
+            return ok();
+        }
+
         if( cmd == "list" )
         {
             const auto filter = tok.joinIntoString( " " );
@@ -322,8 +336,8 @@ namespace sim
                 return hit;
         if( auto* hit = findIn( screen, match ) )
             return hit;
-        // Dialogs shown inside the panel window, over the screen but not children of it (the
-        // METRONOME dialog): the rest of the window, which also holds the panel's own buttons.
+        // The rest of the window, which holds the panel's own buttons (and any popup not yet
+        // parented to the screen, see ui::simScreen()).
         return findIn( *panel.getTopLevelComponent(), match );
     }
 

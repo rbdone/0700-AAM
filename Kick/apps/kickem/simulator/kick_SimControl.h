@@ -32,6 +32,8 @@ namespace sim
     ///                       window (the full-screen popups) to FILE-<n>.png
     ///   turn KNOB STEPS     turn P1..P4 or JOG by STEPS detents (negative = anticlockwise)
     ///   list [FILTER]       log the titled, showing components ("SimControl: item ...")
+    ///   windows             log the desktop windows, the overlays on the screen and the screen
+    ///                       ("SimControl: window main|desktop|overlay|screen <type> <bounds>")
     ///   repeat MS N NAME    press panel control NAME N times, MS ms apart (absolute schedule)
     ///   clickat NAME FX FY  touch the titled component NAME at fraction (FX, FY) of its size
     ///   status              log "SimControl: status <text>" from SimControl::statusProvider
