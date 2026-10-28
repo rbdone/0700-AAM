@@ -242,11 +242,19 @@ namespace ui
 
     void KickTableView::mouseDown( const juce::MouseEvent& event )
     {
+#ifdef SIM_BUILD
+        // Desktop distances are scaled in the simulator (the screen is drawn scaled inside the
+        // front panel, see getRowNumbers): take the touch in the canvas's own coordinates.
+        auto Y   = event.getEventRelativeTo( &canvas ).getPosition().getY();
+        auto row = canvas.getRowFromY( Y );
+        juce::Logger::writeToLog( "SimTable: " + getName() + " touched row " + juce::String( row ) );
+#else
         auto viewPos  = canvas.getScreenPosition();
         auto clickPos = event.getScreenPosition();
 
         auto Y   = clickPos.getY() - viewPos.getY();
         auto row = canvas.getRowFromY( Y );
+#endif
         if( enableRowSelectionFlag )
             selectRow( row < getNumRows() ? row : getSelectedRow() );
     }
@@ -298,11 +306,16 @@ namespace ui
 
     void KickTableView::mouseDoubleClick( const juce::MouseEvent& event )
     {
+#ifdef SIM_BUILD
+        auto Y   = event.getEventRelativeTo( &canvas ).getPosition().getY(); // as in mouseDown
+        auto row = canvas.getRowFromY( Y );
+#else
         auto viewPos  = canvas.getScreenPosition();
         auto clickPos = event.getScreenPosition();
 
         auto Y   = clickPos.getY() - viewPos.getY();
         auto row = canvas.getRowFromY( Y );
+#endif
         if( rowComponents.size() > 0 )
             if( onRowDoubleClicked && juce::isPositiveAndBelow( row, rowComponents.size() ) )
                 onRowDoubleClicked( row );

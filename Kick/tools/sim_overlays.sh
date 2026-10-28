@@ -1,14 +1,18 @@
 #!/bin/sh
-# Overlay check: the app's full-screen popups (loading spinner, dialogs, nested dialogs) and its
-# notification bubbles must appear over the simulated screen, scaled with it, never as separate
-# windows at the top-left of the Mac's display. Panel controls must still work while a dialog
-# is modal, as the hardware keys do on the unit.
+# Scaled-screen check: the app's full-screen popups (loading spinner, dialogs, nested dialogs)
+# and its notification bubbles must appear over the simulated screen, scaled with it, never as
+# separate windows at the top-left of the Mac's display. Panel controls must still work while a
+# dialog is modal, as the hardware keys do on the unit. A touch on a list row selects that row
+# (the lists measured touches in desktop pixels, which the simulator scales).
 #
 #   Kick/tools/sim_overlays.sh [OUTDIR]      # default OUTDIR: Kick/build/logs/overlays
 #
 # Exit status 0 when every check passes, 1 otherwise. Evidence in OUTDIR: sim.log and
-# screenshots (dialog.png, nested.png, bubble.png). Runs through sim_ctl.sh, so it also works
-# with the Mac's screen locked. Build KT_KickEM first.
+# screenshots (dialog.png, nested.png, bubble.png, list.png). Runs through sim_ctl.sh, so it
+# also works with the Mac's screen locked, except the list-row checks: lists take touches
+# through a mouse listener, which only a real click reaches (sim_click.sh: Accessibility
+# permission, unlocked screen). Those are reported as SKIP when no real click can be made.
+# Build KT_KickEM first.
 set -u
 TOOLS=$(cd "$(dirname "$0")" && pwd)
 KICK=$(cd "$TOOLS/.." && pwd)
@@ -127,6 +131,24 @@ check_overlays "notification bubble" bubbleNotification
 sleep 2.5
 check_none "bubble gone after its timeout"
 "$CTL" press ON/OFF >/dev/null # back off
+
+#### 5. List rows (BROWSE: the Location list, then the file list of Demos) ######################
+"$CTL" press BROWSE >/dev/null || fail "BROWSE not delivered"
+sleep 1.5
+# row ROW_EXPECTED X Y WHAT: real click at Kick-screen pixel (X,Y), expect that row touched.
+row() {
+    START=$(( $(wc -l < "$LOG") + 1 ))
+    "$TOOLS/sim_click.sh" --at "$2" "$3" >/dev/null 2>"$OUT/sim_click.err" || return 2
+    sleep 1
+    GOT=$(tail -n +"$START" "$LOG" | sed -n 's/^SimTable: .* touched row //p' | tail -1)
+    if [ "$GOT" = "$1" ]; then pass "$4: touch selects row $1"; else fail "$4: expected row $1, touched row '${GOT:-none}'"; fi
+}
+if row 2 83 323 "Location list, Demos"; then
+    row 4 460 428 "Demos file list, Demo 03"
+    "$CTL" shot "$OUT/list.png" >/dev/null
+else
+    say "SKIP  list rows: no real click possible ($(head -1 "$OUT/sim_click.err"))"
+fi
 
 kill -0 "$PID" 2>/dev/null && pass "simulator still running" || fail "simulator exited"
 
