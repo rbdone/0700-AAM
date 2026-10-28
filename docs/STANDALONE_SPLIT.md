@@ -197,36 +197,36 @@ script whose output goes into the pull request.
 |---|---|---|---|---|---|---|
 | 1-2 | `3rdParty/juce_serialport/juce_serialport.h` | stub's `#warning` unless `SIM_BUILD` | generic | stub warns on Linux (phase 1); real POSIX port replaces it | `build/release-builds`, then `feature/serialport` | planned |
 | 3-4 | `engine/.../mt_audio_manager.cpp` | `resolveRelativeSamplePaths` (definition, call) under `SIM_BUILD \|\| JUCE_MAC` | generic | unconditional | `fix/relative-sample-paths` | planned |
-| 5 | `engine/.../mt_audio_manager.cpp` | `SimProject: loaded <path>` | generic | `Project: loaded <path>`, always logged | `feature/desktop-seams` | planned |
-| 6 | `engine/.../mt_audio_track.cpp` | `KICK_SIM_LOG_NOTES` note log | runtime | `KICK_LOG_NOTES=1`, read once | `feature/desktop-seams` | planned |
-| 7-8 | `hardware/source/kick_Hwpref.cpp` | `setDate` / `setTime` return early | runtime | `mt::hw::isAvailable( clock )`, otherwise log `FeatureUnavailable: clock` | `feature/desktop-seams` | planned |
-| 9-10 | `hardware/source/kick_WifiFirmware.cpp` | `executeCommand` / scan return early | runtime | `mt::hw::isAvailable( wifi )` | `feature/desktop-seams` | planned |
-| 11 | `input_events/input_events.cpp` | `#include` for `Factory<SimulatorInterface>` | emulator | removed | `feature/desktop-seams` | planned |
-| 12-13 | `input_events/input_events.cpp` | `SimulatorInterface` connect / send (**upstream's own two sites**, reworked) | emulator | removed; the serial path runs on every platform, and the panel is on the other end of the port | `feature/desktop-seams` (after `feature/serialport`) | planned |
-| 14 | `input_events/kick_SimulatorInterface.h` | interface (doc comment names `SIM_BUILD`) | emulator | file deleted | `feature/desktop-seams` | planned |
+| 5 | `engine/.../mt_audio_manager.cpp` | `SimProject: loaded <path>` | generic | `Project: loaded <path>`, always logged | `feature/desktop-seams` | pr #2 |
+| 6 | `engine/.../mt_audio_track.cpp` | `KICK_SIM_LOG_NOTES` note log | runtime | `KICK_LOG_NOTES=1`, read once | `feature/desktop-seams` | pr #2 |
+| 7-8 | `hardware/source/kick_Hwpref.cpp` | `setDate` / `setTime` return early | runtime | `mt::hw::isAvailable( clock )`, otherwise log `FeatureUnavailable: clock` | `feature/desktop-seams` | pr #2 |
+| 9-10 | `hardware/source/kick_WifiFirmware.cpp` | `executeCommand` / scan return early | runtime | `mt::hw::isAvailable( wifi )` | `feature/desktop-seams` | pr #2 |
+| 11 | `input_events/input_events.cpp` | `#include` for `Factory<SimulatorInterface>` | emulator | removed | `feature/desktop-seams` | pr #2 |
+| 12-13 | `input_events/input_events.cpp` | `SimulatorInterface` connect / send (**upstream's own two sites**, reworked) | emulator | removed; the serial path runs on every platform, and the panel is on the other end of the port | `feature/desktop-seams` (after `feature/serialport`) | pr #2 |
+| 14 | `input_events/kick_SimulatorInterface.h` | interface (doc comment names `SIM_BUILD`) | emulator | file deleted | `feature/desktop-seams` | pr #2 |
 | 15 | `kick_ui/dialogs/kick_AppHome.cpp` | AUTO: notification + `SimUnavailable: Automation` | generic | log line only (`AUTO: no automation engine in this firmware`); no UI change on the device | `feature/key-handlers` | planned |
-| 16-17 | `modes/filebrowser/kick_fileBrowser.{h,cpp}` | SD / USB notice below the Location rows | emulator | dropped: an absent SD card is normal on a unit, so a notice would change the device. The emulator README documents it | `feature/desktop-seams` | planned |
-| 18-20 | `swupdate/kick_SWUpdateView.{h,cpp}` | notice member, add, skip the image scan | runtime | `FeatureUnavailable` when `!isAvailable( update )`; the scan is skipped only then | `feature/desktop-seams` | planned |
-| 21 | `kick_ui_controls/kick_ui_controls.h` | include `kick_SimUnavailable.h` | runtime | include `kick_FeatureUnavailable.h` | `feature/desktop-seams` | planned |
-| 22 | `kick_ui_controls/source/kick_ControlBase.h` | `simFocusTarget()` | runtime | focus fallback owned by the test-control module, active only with `KICK_TEST_CONTROL` | `feature/desktop-seams` | planned |
-| 23 | `kick_ControlBase.h` | `simScreen()` | generic | `ui::overlayRoot()`, registered by `apps/kick/Main.cpp` | `feature/desktop-seams` | planned |
-| 24 | `kick_ControlBase.h` | `hasSelectionFocus` uses the fallback | runtime | as 22 | `feature/desktop-seams` | planned |
-| 25 | `kick_ControlBase.h` | `setFocus` records the fallback | runtime | as 22 | `feature/desktop-seams` | planned |
-| 26 | `kick_ControlBase.h` | `getComponentInFocus` / `clearFocusComponent` use the fallback | runtime | as 22 | `feature/desktop-seams` | planned |
-| 27-28 | `kick_ui_controls/source/kick_SimUnavailable.h` | whole file under `SIM_BUILD` | runtime | `kick_FeatureUnavailable.h`, always compiled, created only for an unavailable feature | `feature/desktop-seams` | planned |
-| 29 | `kick_ui_controls/source/kick_table.cpp` | `mouseDown`: touch in canvas coordinates, `SimTable:` log | generic | `getEventRelativeTo( &canvas )` always; log line dropped (or `KICK_TEST_CONTROL`-gated) | `feature/desktop-seams` | planned |
-| 30 | `kick_table.cpp` | `getRowNumbers`: measure from the transformed / top-level root | generic | always | `feature/desktop-seams` | planned |
-| 31 | `kick_table.cpp` | `mouseDoubleClick` as 29 | generic | always | `feature/desktop-seams` | planned |
-| 32-33 | `kick_ui_controls/source/kick_utils_bubble.cpp` | bubble added to `simScreen()`, deleted after fading | generic | added to `overlayRoot()` | `feature/desktop-seams` | planned |
-| 34 | `kick_ui_controls/source/kick_utils_popup.cpp` | popup bounds = `layout::screen`, no `addToDesktop` | generic | child of `overlayRoot()` | `feature/desktop-seams` | planned |
-| 35 | `kick_utils_popup.cpp` | blurred backdrop from `simScreen()` | generic | snapshot of `overlayRoot()` | `feature/desktop-seams` | planned |
-| 36 | `kick_utils_popup.cpp` | `canModalEventBeSentToComponent` (panel keys beside the screen) | emulator | dropped: the panel is another process | `feature/desktop-seams` | planned |
-| 37 | `kick_utils_popup.cpp` | `getFullScreenModalPopUP` adds to `simScreen()` | generic | adds to `overlayRoot()` (was: the active top-level window) | `feature/desktop-seams` | planned |
-| 38 | `kick_ui_settings/kick_ui_settings.h` | `SettingsInterface::simUnavailable` + `resized` | runtime | `FeatureUnavailable` member, same re-attach on layout | `feature/desktop-seams` | planned |
-| 39 | `source/kick_ui_settings_cv.cpp` | CV notice | runtime | `!isAvailable( cv )` | `feature/desktop-seams` | planned |
-| 40 | `source/kick_ui_settings_etnernet.cpp` | Ethernet notice | runtime | `!isAvailable( ethernet )` | `feature/desktop-seams` | planned |
-| 41 | `source/kick_ui_settings_wifi.cpp` | Wi-Fi notice | runtime | `!isAvailable( wifi )` | `feature/desktop-seams` | planned |
-| 42-44 | `kick_ui_systemResources/kick_ui_systemResources.{h,cpp}` | meters notice member, add, skip the 1 Hz refresh | runtime | `!isAvailable( resources )` (false off Linux) | `feature/desktop-seams` | planned |
+| 16-17 | `modes/filebrowser/kick_fileBrowser.{h,cpp}` | SD / USB notice below the Location rows | emulator | dropped: an absent SD card is normal on a unit, so a notice would change the device. The emulator README documents it | `feature/desktop-seams` | dropped |
+| 18-20 | `swupdate/kick_SWUpdateView.{h,cpp}` | notice member, add, skip the image scan | runtime | `FeatureUnavailable` when `!isAvailable( update )`; the scan is skipped only then | `feature/desktop-seams` | pr #2 |
+| 21 | `kick_ui_controls/kick_ui_controls.h` | include `kick_SimUnavailable.h` | runtime | include `kick_FeatureUnavailable.h` | `feature/desktop-seams` | pr #2 |
+| 22 | `kick_ui_controls/source/kick_ControlBase.h` | `simFocusTarget()` | runtime | focus fallback owned by the test-control module, active only with `KICK_TEST_CONTROL` | `feature/desktop-seams` | pr #2 |
+| 23 | `kick_ControlBase.h` | `simScreen()` | generic | `ui::overlayRoot()`, registered by `apps/kick/Main.cpp` | `feature/desktop-seams` | pr #2 |
+| 24 | `kick_ControlBase.h` | `hasSelectionFocus` uses the fallback | runtime | as 22 | `feature/desktop-seams` | pr #2 |
+| 25 | `kick_ControlBase.h` | `setFocus` records the fallback | runtime | as 22 | `feature/desktop-seams` | pr #2 |
+| 26 | `kick_ControlBase.h` | `getComponentInFocus` / `clearFocusComponent` use the fallback | runtime | as 22 | `feature/desktop-seams` | pr #2 |
+| 27-28 | `kick_ui_controls/source/kick_SimUnavailable.h` | whole file under `SIM_BUILD` | runtime | `kick_FeatureUnavailable.h`, always compiled, created only for an unavailable feature | `feature/desktop-seams` | pr #2 |
+| 29 | `kick_ui_controls/source/kick_table.cpp` | `mouseDown`: touch in canvas coordinates, `SimTable:` log | generic | `getEventRelativeTo( &canvas )` always; log line dropped (or `KICK_TEST_CONTROL`-gated) | `feature/desktop-seams` | pr #2 |
+| 30 | `kick_table.cpp` | `getRowNumbers`: measure from the transformed / top-level root | generic | always | `feature/desktop-seams` | pr #2 |
+| 31 | `kick_table.cpp` | `mouseDoubleClick` as 29 | generic | always | `feature/desktop-seams` | pr #2 |
+| 32-33 | `kick_ui_controls/source/kick_utils_bubble.cpp` | bubble added to `simScreen()`, deleted after fading | generic | added to `overlayRoot()` | `feature/desktop-seams` | pr #2 |
+| 34 | `kick_ui_controls/source/kick_utils_popup.cpp` | popup bounds = `layout::screen`, no `addToDesktop` | generic | child of `overlayRoot()` | `feature/desktop-seams` | pr #2 |
+| 35 | `kick_utils_popup.cpp` | blurred backdrop from `simScreen()` | generic | snapshot of `overlayRoot()` | `feature/desktop-seams` | pr #2 |
+| 36 | `kick_utils_popup.cpp` | `canModalEventBeSentToComponent` (panel keys beside the screen) | emulator | dropped: the panel is another process | `feature/desktop-seams` | dropped |
+| 37 | `kick_utils_popup.cpp` | `getFullScreenModalPopUP` adds to `simScreen()` | generic | adds to `overlayRoot()` (was: the active top-level window) | `feature/desktop-seams` | pr #2 |
+| 38 | `kick_ui_settings/kick_ui_settings.h` | `SettingsInterface::simUnavailable` + `resized` | runtime | `FeatureUnavailable` member, same re-attach on layout | `feature/desktop-seams` | pr #2 |
+| 39 | `source/kick_ui_settings_cv.cpp` | CV notice | runtime | `!isAvailable( cv )` | `feature/desktop-seams` | pr #2 |
+| 40 | `source/kick_ui_settings_etnernet.cpp` | Ethernet notice | runtime | `!isAvailable( ethernet )` | `feature/desktop-seams` | pr #2 |
+| 41 | `source/kick_ui_settings_wifi.cpp` | Wi-Fi notice | runtime | `!isAvailable( wifi )` | `feature/desktop-seams` | pr #2 |
+| 42-44 | `kick_ui_systemResources/kick_ui_systemResources.{h,cpp}` | meters notice member, add, skip the 1 Hz refresh | runtime | `!isAvailable( resources )` (false off Linux) | `feature/desktop-seams` | pr #2 |
 
 Totals: **generic 15**, **runtime 22**, **emulator 7** (44).
 
@@ -310,6 +310,7 @@ drift.
 |---|---|---|
 | 0 inventory | done (2026-10-28) | this file, `6b6024ce` |
 | 3 serial port | done (2026-10-28), CI queued: POSIX `juce_serialport` written from scratch, `KICK_SERIAL_DEVICE`, serial link on macOS, round-trip test (95 checks) and pty test (29), handshake LIVE over a pty on macOS (0.47 s) and Linux arm64 (0.11 s), device default `/dev/ttymxc0` unchanged | PR #15, `feature/serialport` at `da824faa` |
+| 3 desktop seams | done (2026-10-28), CI green on `e997af3f`: `ui::overlayRoot()`, list hit-testing, `mt::hw::isAvailable` + `KICK_HARDWARE` + `ui::FeatureUnavailable`, `Kick/modules/test_control` (`KICK_TEST_CONTROL`), `KICK_AUDIO_PROBE` / `KICK_AUDIO_INPUT`, `KICK_LOG_NOTES`, `Project: loaded`; `SimulatorInterface`, old `apps/kickem` and `KICK_SIMULATOR` removed. **`git grep SIM_BUILD` on the branch: 0.** Popups shown inside the app's 1024x600 window on macOS; device path unchanged with the variables unset (macOS and Linux arm64 logs) | PR #2 (draft), `feature/desktop-seams` at `e997af3f` |
 | 4 emulator repository | done (2026-10-28): AGPL `LICENSE`, layout, clean import naming `6b6024ce` (no `filter-repo`: the simulator commits also changed firmware), firmware fetch by URL / ref with `kickem::protocol` from the fetched tree, `protocol_roundtrip` passes against `kickem/main`, Starter Kit regenerates byte-identical, `kickem fetch` and the machine lock work; logo not committed | `KickEm-Tools/KickEmulator` `main` at `7395d4e` |
 
 Wire-format notes from phase 4, for the phase 5 panel:
@@ -328,5 +329,17 @@ Wire-format notes from phase 4, for the phase 5 panel:
   - These are the targets for phase 5's fault test.
 - `Kick` is single-instance (`moreThanOneInstanceAllowed()` returns false): a second one exits at
   once with no log. The emulator's machine lock must cover the plain `Kick` too.
+- New log names from phase 3, which the checks must be ported to:
+  - `TestControl: ...` (was `SimControl:`)
+  - `FeatureUnavailable: <feature> shown|hidden` (was `SimUnavailable:`)
+  - `FeatureUnavailable: <feature>: command not run: <cmd>`
+  - `Hardware: KICK_HARDWARE=...`
+  - `Note: track ...` (was `SimNote:`)
+  - `Project: loaded <path>` (was `SimProject:`)
+- `TestControl` `tap` / `click` deliver to the touched component only, so a parent's mouse
+  listener (`KickTableView` canvas) does not hear them. Selecting list rows by touch still needs a
+  check in phase 5.
+- On Linux desktop the plain app runs `ifconfig eth0 192.168.0.1` and `timedatectl set-timezone`
+  at startup: the emulator must set `KICK_HARDWARE=none` there.
 - Phase 1 docs gap: on bookworm without webkit, `libxi-dev` is needed, because the JUCE multitouch
   patch includes `XInput2.h`.
