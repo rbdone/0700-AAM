@@ -113,6 +113,7 @@ present, so the panel is never created.
   - The area above the screen, where the unit carries its logo, is blank. Before, the panel fell
     back to printing the word "behringer" there.
   - Done in KickEmulator `e0cd137`.
+  - The model name "KICK" printed under the screen stays (user, 2026-10-29).
 - **Generator licence** (decided by the user, 2026-10-28). `make_starter_kit.py` synthesises
   everything from fixed seeds with the Python standard library and reads no input files, so the
   script is CC0 like its output.
@@ -310,6 +311,7 @@ drift.
 | Phase | State | Where |
 |---|---|---|
 | 1 release builds | done (2026-10-28), CI green (runs 40771852889, 40773282546): `Kick` on macOS, Linux x86_64, `KT_Kick` (the `Kick` target, renamed as the device installs it) on Linux arm64, artifact `KT_Kick-linux-arm64` (tarball + manifest; native Ubuntu 24.04 build, needs glibc >= 2.39). Deviations: the stub notice is `#pragma message` (the project's `-w` hides `#warning`); `mt_AudioDevice` from `da3a94f9` (before the probe); `Kick/README.md` Building section points to `docs/DEVELOPMENT.md`; the in-tree AudIO / ComProtocol default applies only while `MT_PLATFORM_GIT_PATH` is the placeholder | PR #1 **merged** 2026-10-29 by the user's go-ahead (merge commit `0e7cf279` on `kickem/main`); PRs #3-#8 and #15 retargeted to `main`, #2 to `feature/serialport` |
+| merge batch 2 | 2026-10-29, user's go-ahead ("merge green PRs"): #3 audio-object-ids, #5 knob-handlers, #7 relative-sample-paths, #8 sequencer-timing, #15 serialport, #9 next-seq-crash, #10 timing-correct, #11 note-recording merged into `kickem/main` (merge commits). #2 desktop-seams marked ready; it conflicted with main (the two known spots), resolved in `7a26ac2f`, CI re-running. #4, #6, #12, #13, #16 re-running cancelled macOS jobs | `kickem/main` |
 | 0 inventory | done (2026-10-28) | this file, `6b6024ce` |
 | 3 serial port | done (2026-10-28), CI queued: POSIX `juce_serialport` written from scratch, `KICK_SERIAL_DEVICE`, serial link on macOS, round-trip test (95 checks) and pty test (29), handshake LIVE over a pty on macOS (0.47 s) and Linux arm64 (0.11 s), device default `/dev/ttymxc0` unchanged | PR #15, `feature/serialport` at `da824faa` |
 | 3 desktop seams | done (2026-10-28), CI green on `e997af3f`: `ui::overlayRoot()`, list hit-testing, `mt::hw::isAvailable` + `KICK_HARDWARE` + `ui::FeatureUnavailable`, `Kick/modules/test_control` (`KICK_TEST_CONTROL`), `KICK_AUDIO_PROBE` / `KICK_AUDIO_INPUT`, `KICK_LOG_NOTES`, `Project: loaded`; `SimulatorInterface`, old `apps/kickem` and `KICK_SIMULATOR` removed. **`git grep SIM_BUILD` on the branch: 0.** Popups shown inside the app's 1024x600 window on macOS; device path unchanged with the variables unset (macOS and Linux arm64 logs) | PR #2 (draft), `feature/desktop-seams` at `e997af3f` |
