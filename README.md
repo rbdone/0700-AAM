@@ -6,6 +6,25 @@
 
 Source code for the Behringer KICK.
 
+## This fork's emulator work has moved
+
+The Kick emulator developed in this fork is now its own project,
+[KickEm-Tools/KickEmulator](https://github.com/KickEm-Tools/KickEmulator) (AGPL-3.0-or-later). It
+takes a firmware repository URL and a ref, builds that firmware, and runs it against an emulated
+front panel that speaks the control-surface microcontroller's serial protocol. Fast mode runs the
+desktop build over a pseudo-terminal; faithful mode runs the Linux arm64 build in a QEMU VM. Its
+checks cover smoke, transport, modes, pads, sampler/looper, overlays and serial faults.
+
+**Why:** with the emulator separate from the firmware, it can test any new firmware release or fork
+that builds and keeps the control-surface protocol, by URL and ref. No simulator code goes into the
+firmware, and the work is not tied to one branch of MusicTribeOpenSource's repository.
+
+The firmware changes it needs (building the public release, a real serial port, device bug fixes)
+land in [KickEm-Tools/0700-AAM](https://github.com/KickEm-Tools/0700-AAM) and are to be proposed
+upstream to [MusicTribeOpenSource/0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM). The
+earlier in-tree simulator work is kept on the branch
+[`rbdone/goal-simulator-controls`](https://github.com/rbdone/0700-AAM/tree/rbdone/goal-simulator-controls).
+
 <p align="center">
   <img src="docs/images/kick-front.webp" alt="Behringer KICK" width="720">
 </p>
