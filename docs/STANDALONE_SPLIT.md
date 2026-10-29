@@ -134,24 +134,24 @@ The panel replaces all of it over the wire.
 
 | File | Hunk | Decision / note | Status |
 |---|---|---|---|
-| `.gitignore` | new: `.3rdPartySourceCache/` | as is | pr #1 |
-| `AudIO/AudIO/Includes/Platform.h` | `<thread>`, `<chrono>` | as is | pr #1 |
-| `AudIO/juce_modules.cmake` | new: registers AudIO, AudIO_juce, AudIO_constants | as is | pr #1 |
-| `AudIO/AudIO_constants/AudIO_constants.h` | new: reconstructed constants | keep the reasoning table (DEVELOPMENT.md 5.1) as comments beside each value | pr #1 |
-| `AudIO/AudIO_juce/AudIO_juce.{h,cpp}` | new module | as is | pr #1 |
-| `AudIO/AudIO_juce/source/mt_ADSR.h`, `mt_Filter.h` | new: reconstructed | as is | pr #1 |
-| `AudIO/AudIO_juce/source/mt_AudioDevice.{h,cpp}` | new: reconstructed device, FIFO re-blocking | **without** the probe hook (moves to `feature/desktop-seams`) | pr #1 |
-| `AudIO/AudIO_juce/source/mt_Recorder.{h,cpp}` | new: Recorder / SampleRecorder / Looper | as is, with the phase 4 rework (routing id, length callback, loop mode). Needs `fix/audio-object-ids` to be heard: without it the sampler is never processed | pr #1 |
-| `Kick/modules/3rdParty/juce_serialport/*` | new: API-compatible stub | Stub only, to make the release build. Drop the `SIM_BUILD` test in its `#warning` (warn on every Linux build). `feature/serialport` replaces it | pr #1 |
-| `Kick/modules/common/source/kick_Constants.h` | `EMPTY::String` | as is | pr #1 |
-| `Kick/modules/engine/interface/interface.h` | `EMPTY::SampleBuffer` | as is | pr #1 |
-| `Kick/modules/hardware/source/kick_WifiFirmware.cpp` | `#include <sys/stat.h>` | as is (the `SIM_BUILD` hunks are SEAM, below) | pr #1 |
-| `Kick/modules/contracts/utils/keyboard/keyboard_detector.{h,cpp}` | keyboard map on `__APPLE__` | as is (macOS desktop input without a panel) | pr #1 |
-| `Kick/apps/kick/CMakeLists.txt` | `MICROPHONE_PERMISSION_ENABLED TRUE` | as is | pr #1 |
+| `.gitignore` | new: `.3rdPartySourceCache/` | as is | merged |
+| `AudIO/AudIO/Includes/Platform.h` | `<thread>`, `<chrono>` | as is | merged |
+| `AudIO/juce_modules.cmake` | new: registers AudIO, AudIO_juce, AudIO_constants | as is | merged |
+| `AudIO/AudIO_constants/AudIO_constants.h` | new: reconstructed constants | keep the reasoning table (DEVELOPMENT.md 5.1) as comments beside each value | merged |
+| `AudIO/AudIO_juce/AudIO_juce.{h,cpp}` | new module | as is | merged |
+| `AudIO/AudIO_juce/source/mt_ADSR.h`, `mt_Filter.h` | new: reconstructed | as is | merged |
+| `AudIO/AudIO_juce/source/mt_AudioDevice.{h,cpp}` | new: reconstructed device, FIFO re-blocking | **without** the probe hook (moves to `feature/desktop-seams`) | merged |
+| `AudIO/AudIO_juce/source/mt_Recorder.{h,cpp}` | new: Recorder / SampleRecorder / Looper | as is, with the phase 4 rework (routing id, length callback, loop mode). Needs `fix/audio-object-ids` to be heard: without it the sampler is never processed | merged |
+| `Kick/modules/3rdParty/juce_serialport/*` | new: API-compatible stub | Stub only, to make the release build. Drop the `SIM_BUILD` test in its `#warning` (warn on every Linux build). `feature/serialport` replaces it | merged |
+| `Kick/modules/common/source/kick_Constants.h` | `EMPTY::String` | as is | merged |
+| `Kick/modules/engine/interface/interface.h` | `EMPTY::SampleBuffer` | as is | merged |
+| `Kick/modules/hardware/source/kick_WifiFirmware.cpp` | `#include <sys/stat.h>` | as is (the `SIM_BUILD` hunks are SEAM, below) | merged |
+| `Kick/modules/contracts/utils/keyboard/keyboard_detector.{h,cpp}` | keyboard map on `__APPLE__` | as is (macOS desktop input without a panel) | merged |
+| `Kick/apps/kick/CMakeLists.txt` | `MICROPHONE_PERMISSION_ENABLED TRUE` | as is | merged |
 | `Kick/apps/kick/CMakeLists.txt` | `if(APPLE)` copy `assets/StarterKit` to `data/samplesKick` | **CONTENT, moves to the emulator installer** | not in pr #1 (emulator installs it) |
-| `Kick/3rdParty.cmake` / configure | (new) | Default `CPM_AudIO_SOURCE` / `CPM_COM_PROTOCOL_SOURCE` to the in-tree copies when the internal git server is unreachable, or document the flags; CI passes them | pr #1 |
-| `.github/workflows/build.yml` | (new) | `Kick` on `macos-14` and `ubuntu-24.04`, `KT_Kick` on `ubuntu-24.04-arm`, CPM cache, `KT_Kick-linux-arm64` artifact with a manifest; coordinate with `pin-buildroot-ci-image` | pr #1 |
-| `docs/DEVELOPMENT.md` (fork) | (new, short) | building on macOS / Linux / arm64, what 5.1-5.3 fixed | pr #1 |
+| `Kick/3rdParty.cmake` / configure | (new) | Default `CPM_AudIO_SOURCE` / `CPM_COM_PROTOCOL_SOURCE` to the in-tree copies when the internal git server is unreachable, or document the flags; CI passes them | merged |
+| `.github/workflows/build.yml` | (new) | `Kick` on `macos-14` and `ubuntu-24.04`, `KT_Kick` on `ubuntu-24.04-arm`, CPM cache, `KT_Kick-linux-arm64` artifact with a manifest; coordinate with `pin-buildroot-ci-image` | merged |
+| `docs/DEVELOPMENT.md` (fork) | (new, short) | building on macOS / Linux / arm64, what 5.1-5.3 fixed | merged |
 
 ### FIX (phase 2: one topic branch per fix or close group, from `kickem/main` after phase 1, all upstreamable)
 
@@ -309,7 +309,7 @@ drift.
 
 | Phase | State | Where |
 |---|---|---|
-| 1 release builds | done (2026-10-28), CI green (runs 40771852889, 40773282546): `Kick` on macOS, Linux x86_64, `KT_Kick` (the `Kick` target, renamed as the device installs it) on Linux arm64, artifact `KT_Kick-linux-arm64` (tarball + manifest; native Ubuntu 24.04 build, needs glibc >= 2.39). Deviations: the stub notice is `#pragma message` (the project's `-w` hides `#warning`); `mt_AudioDevice` from `da3a94f9` (before the probe); `Kick/README.md` Building section points to `docs/DEVELOPMENT.md`; the in-tree AudIO / ComProtocol default applies only while `MT_PLATFORM_GIT_PATH` is the placeholder | PR #1, `build/release-builds` at `6f69e7b1` |
+| 1 release builds | done (2026-10-28), CI green (runs 40771852889, 40773282546): `Kick` on macOS, Linux x86_64, `KT_Kick` (the `Kick` target, renamed as the device installs it) on Linux arm64, artifact `KT_Kick-linux-arm64` (tarball + manifest; native Ubuntu 24.04 build, needs glibc >= 2.39). Deviations: the stub notice is `#pragma message` (the project's `-w` hides `#warning`); `mt_AudioDevice` from `da3a94f9` (before the probe); `Kick/README.md` Building section points to `docs/DEVELOPMENT.md`; the in-tree AudIO / ComProtocol default applies only while `MT_PLATFORM_GIT_PATH` is the placeholder | PR #1 **merged** 2026-10-29 by the user's go-ahead (merge commit `0e7cf279` on `kickem/main`); PRs #3-#8 and #15 retargeted to `main`, #2 to `feature/serialport` |
 | 0 inventory | done (2026-10-28) | this file, `6b6024ce` |
 | 3 serial port | done (2026-10-28), CI queued: POSIX `juce_serialport` written from scratch, `KICK_SERIAL_DEVICE`, serial link on macOS, round-trip test (95 checks) and pty test (29), handshake LIVE over a pty on macOS (0.47 s) and Linux arm64 (0.11 s), device default `/dev/ttymxc0` unchanged | PR #15, `feature/serialport` at `da824faa` |
 | 3 desktop seams | done (2026-10-28), CI green on `e997af3f`: `ui::overlayRoot()`, list hit-testing, `mt::hw::isAvailable` + `KICK_HARDWARE` + `ui::FeatureUnavailable`, `Kick/modules/test_control` (`KICK_TEST_CONTROL`), `KICK_AUDIO_PROBE` / `KICK_AUDIO_INPUT`, `KICK_LOG_NOTES`, `Project: loaded`; `SimulatorInterface`, old `apps/kickem` and `KICK_SIMULATOR` removed. **`git grep SIM_BUILD` on the branch: 0.** Popups shown inside the app's 1024x600 window on macOS; device path unchanged with the variables unset (macOS and Linux arm64 logs) | PR #2 (draft), `feature/desktop-seams` at `e997af3f` |
