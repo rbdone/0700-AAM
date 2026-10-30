@@ -204,6 +204,10 @@ script whose output goes into the pull request.
 | `feature/test-control-touch` | `Kick/modules/test_control` | Runtime seam (test control only): `touch X Y` goes through the window's peer as the main mouse source, so list rows (a parent's mouse listener) hear it; refuses with an error while the screen is locked | `checks/overlays` list rows (passed unlocked; SKIP locked) | merged (#18) |
 | `fix/padmix-gain-curve` | `kick_ui/modes/mixers/kick_PadMixer.cpp` (`PadMixerDisplay::linkRotated`) | Observed in phase 5b, cause found 2026-10-29: PAD MIX LEVEL is the pad's linear gain 0..1 in steps of 0.01 (as intended), but the P knobs passed the raw detent count to `KickSlider::knobRotated`, so one detent moved LEVEL by 1.0 (pad 1: -13.3 → -120 dBFS) and PAN to hard left / right. Fix: step by the slider's interval. After: P1 -1 → 0.99 (-13.4 dBFS), -50 → 0.50 (-19.3 dBFS). Follow-ups noted, not done: the track mixers' PAN knobs take the raw count the same way (read, not measured); the pad tiles label the linear gain "db" | `checks/modes` 50 / 50, PAD MIX -50 = TRACK MIX -50 = -19.3 dBFS | merged (#20) |
 
+| `fix/recentproject-empty-list` *(candidate)* | `kick_ui/recent_project/kick_RecentProject.cpp` | Observed in phase 7 (CI gdb backtrace on ubuntu-24.04 / -arm): `ui::RecentProject::visibilityChanged()` reads `recentItems[selectedIndex]` on an empty list, SIGSEGV about 5 s after start whenever the Projects list is empty (on Linux desktop the app reads `/app/demos`, which does not exist there) | Linux desktop fast mode | planned |
+| `feature/data-root` *(candidate)* | `common/source/kick_paths.cpp` | Linux builds always use the unit's absolute paths (`/app`, `/data/sounds`, `/home/Kick`), so fast mode cannot run on a Linux desktop. A runtime extension point (e.g. `KICK_DATA_ROOT`, inert on the unit when unset) would allow it | Linux desktop fast mode | planned |
+| `KT_Kick` SIGSEGV under CPU starvation *(observation)* | engine | Observed once in faithful CI under TCG: after 90 s of playback at 0.03 of real time, `ktkick.service: Main process exited, code=killed, status=11/SEGV`, no backtrace | needs a reproduction | planned |
+
 ### SEAM: the 44 `SIM_BUILD` sites
 
 | # | File | Site | Decision | Becomes | Branch | Status |
@@ -334,6 +338,20 @@ drift.
 | 6 faithful mode | done (2026-10-29): Debian 12 arm64 guest (stock `generic` image, cloud-init), the fork's arm64 `Kick` built in a bookworm container (the CI artifact needs glibc 2.39), started by the fork's own `ktkick.service` → `kt_kick.sh` under `weston@root` + Xwayland at 1024x600; panel on the guest PL011 via QEMU `-chardev pty` (`tcp` for Windows), `KICK_SERIAL_DEVICE=/dev/ttyAMA0`, `KICK_HARDWARE` unset, QMP taps / screendumps, `snd-aloop`, `mac80211_hwsim`. **`checks/smoke --mode vm` passes** on hvf (10 / 10, max -2.9 dBFS) and on TCG. Times (M4 Max, hvf / TCG): boot to SSH 12.3 / 19.5 s, `kickem run` to LIVE 30 / 59 s, smoke about 51 / 97 s, cold artifact build 244 s. x86 Linux TCG estimated 4-7 min for smoke (not measured) | KickEmulator `f38ad22`, against `integration/standalone` `cc5fa831` |
 | 5b checks | done (2026-10-29): `checks/` smoke, transport, modes (50 / 50), pads, sampler_looper, overlays, serial_faults all **pass in fast mode against `integration/standalone` `2d2c9462`**, run one after another (19 / 128 / 149 / 117 / 112 / 23 / 28 s after the build). Overlays' list rows SKIPped in the final run because the Mac was locked; they passed earlier unlocked. `pads`: the ERASE 6 kHz-drop threshold is informational now (pending the user's OK; the note log still proves the erase). Drift against `main` `551de935` recorded in KickEmulator `checks/README.md` | KickEmulator `b5db494` |
 | embedded screen | done (2026-10-29), user request: `kickem run` / `kickem-panel --screen embedded\|window` (embedded is the default). Fast mode: firmware `KICK_SCREEN_MIRROR` (PR #23, open). VM: QEMU `-vnc unix:`, no firmware change. The panel shows the screen in the bezel through a small VNC client. Checks pass: smoke in both screen modes, `embedded_screen` (new) and `overlays` with the Mac locked (list rows no longer SKIP), and VM smoke in both modes. Measured: about 29 fps while playing, 6-8 ms from touch to frame (fast) and 81-175 ms (VM). README screenshots in `docs/images/`. Found and fixed: `modes/vm/artifact.sh --build` shared one Docker build tree between checkouts, so a ref could get another ref's binary (one tree per checkout since `8b25671`); arm64 artifacts built with `--build` before 2026-10-29 may be wrong | KickEmulator #2 merged (`1b9a727`); fork PR #23 |
+| 7 CI and distribution | done (2026-10-29). KickEmulator `28f7d604`:
+- `test-firmware.yml` (`workflow_call`: firmware repository / ref, mode, runner, checks, screen; evidence artifact; job summary with what the mode cannot tell you);
+- `self-test.yml`: fast and vm smoke against fork `main`;
+- `panel.yml`: panel for macOS arm64, Linux x86_64 and Linux arm64; a `panel-v*` tag publishes the release.
+
+Fork #21 `ci/emulator` **merged** (`6dd85eae`): fast smoke on every PR and every push to `main` (`macos-15`); vm nightly and on dispatch.
+
+Run times:
+- Fork cold fast smoke: 10:53 (target under 15 min); warm 6-7.5 min; up to 14 min after a large merge.
+- vm on `ubuntu-24.04-arm`: TCG, no KVM. About 59 min cold (44 min provisioning, then cached), 15:41 cached. Audio is not asserted below 0.8 of real time (the engine runs at 0.12-0.24 of real time).
+
+Hosted macOS runners have an "Apple Virtual Sound Device", so no BlackHole or firmware change was needed.
+
+macOS queueing comes from the free plan's limit of 5 concurrent macOS jobs. Tags `v1` and `panel-v1.0.0` are approved and wait for the CLI PR | KickEmulator `28f7d604`; fork `6dd85eae` |
 | 4 emulator repository | done (2026-10-28): AGPL `LICENSE`, layout, clean import naming `6b6024ce` (no `filter-repo`: the simulator commits also changed firmware), firmware fetch by URL / ref with `kickem::protocol` from the fetched tree, `protocol_roundtrip` passes against `kickem/main`, Starter Kit regenerates byte-identical, `kickem fetch` and the machine lock work; logo not committed | `KickEm-Tools/KickEmulator` `main` at `7395d4e` |
 
 Wire-format notes from phase 4, for the phase 5 panel:
