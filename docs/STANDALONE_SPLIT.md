@@ -352,6 +352,7 @@ Run times:
 Hosted macOS runners have an "Apple Virtual Sound Device", so no BlackHole or firmware change was needed.
 
 macOS queueing comes from the free plan's limit of 5 concurrent macOS jobs. Tags `v1` and `panel-v1.0.0` are approved and wait for the CLI PR | KickEmulator `28f7d604`; fork `6dd85eae` |
+| release | 2026-10-30, the user's go-ahead. After the CLI PR (KickEmulator #4: per-step progress, Ctrl-O details view, the panel as `KickEm.app` in Command-Tab, README first-run times, the fork example, "Windows: coming soon") and a green self-test on `00098c1`: tags `v1` and `panel-v1.0.0` on `00098c1`. Release run 41127302432 published https://github.com/KickEm-Tools/KickEmulator/releases/tag/panel-v1.0.0 with macOS arm64 (`KickEm.app`, ad-hoc signed, `codesign -v` ok), Linux x86_64 and Linux arm64, each with a sha256. Every check passed again against `kickem/main` `6dd85eae` with emulator `00098c1`: all 8 fast-mode checks, and faithful smoke | KickEmulator `v1`, `panel-v1.0.0` |
 | 4 emulator repository | done (2026-10-28): AGPL `LICENSE`, layout, clean import naming `6b6024ce` (no `filter-repo`: the simulator commits also changed firmware), firmware fetch by URL / ref with `kickem::protocol` from the fetched tree, `protocol_roundtrip` passes against `kickem/main`, Starter Kit regenerates byte-identical, `kickem fetch` and the machine lock work; logo not committed | `KickEm-Tools/KickEmulator` `main` at `7395d4e` |
 
 Wire-format notes from phase 4, for the phase 5 panel:
